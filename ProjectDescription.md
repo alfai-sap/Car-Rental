@@ -1,97 +1,231 @@
-# Car Rental Management System (MVP)
+# Car Rental Management System
 
-**Version:** 1.1  
-**Status:** MVP Prototype Specification
+> **Software Requirements Specification (SRS)**
+>
+> **Version:** 1.0
+>
+> **Status:** MVP
+>
+> **Project Type:** Web Application
+>
+> **Last Updated:** August 2026
 
 ---
 
 # Table of Contents
 
 1. Project Overview
-2. Project Goals
-3. Technology Stack
-4. System Architecture
-5. User Roles
-6. MVP Modules
-7. Authentication Module
-8. Customer Module
-9. Vehicle Module
-10. Search & Filtering
-11. Booking Module
-12. Payment Module
-13. Customer Dashboard
-14. Administrator Dashboard
-15. Vehicle Management
-16. Booking Management
-17. Reports
-18. Business Settings
-19. Database Design
-20. UI Pages
-21. Non-Functional Requirements
-22. Development Roadmap
-23. Future Scope
+2. Project Vision
+3. Project Goals
+4. Target Users
+5. Technology Stack
+6. System Architecture
+7. Design Philosophy
+8. Core Features (MVP)
+9. Functional Modules Overview
+10. Database Overview
+11. API Overview
+12. Security Overview
+13. Development Roadmap
+14. Future Expansion
 
 ---
 
 # 1. Project Overview
 
-## Project Name
+## Introduction
 
-**Car Rental Management System**
+The Car Rental Management System is a modern web application designed to digitize and simplify the complete vehicle rental process for both customers and business owners.
 
-## Goal
+Customers can browse available vehicles, create an account, reserve vehicles, complete online payments, and manage their rentals through an intuitive and responsive interface.
 
-Develop a modern, responsive web application that allows customers to browse available rental vehicles, create an account, reserve a vehicle, and complete online payments.
+Administrators manage the entire rental operation through a centralized dashboard where they can oversee vehicles, bookings, payments, customers, and business settings.
 
-The application should also provide administrators with tools to manage vehicles, customers, bookings, and business operations.
-
-This MVP serves as a complete working prototype that can be demonstrated to clients while establishing a scalable foundation for future expansion into a production-ready platform.
+The application is designed to provide a professional, secure, scalable, and user-friendly experience while serving as a long-term platform capable of supporting future business growth.
 
 ---
 
-# 2. Project Goals
+## Purpose
 
-## Customer Goals
+The primary objective of this project is to replace manual rental processes with a centralized digital platform that improves operational efficiency and customer experience.
 
-- Create an account
-- Securely login
+The MVP focuses on validating the complete rental workflow while establishing an architecture that supports future expansion without requiring major redesign.
+
+---
+
+## Scope
+
+The MVP includes every feature necessary to complete an end-to-end vehicle rental process.
+
+Customers will be able to:
+
+- Register an account
+- Login securely
 - Browse available vehicles
 - Search and filter vehicles
 - View vehicle information
-- Book a vehicle
-- Pay online
+- Reserve vehicles
+- Complete online payments
 - View booking history
-- Manage personal profile
+- Manage personal information
 
----
-
-## Business Goals
+Administrators will be able to:
 
 - Manage vehicles
 - Manage bookings
 - Manage customers
-- Track rental activity
+- Manage payments
+- Configure business settings
 - View reports
-- Configure rental settings
+
+Features such as loyalty programs, multi-branch support, fleet maintenance, analytics, and native mobile applications are intentionally excluded from the MVP and reserved for future releases.
 
 ---
 
-# 3. Technology Stack
+# 2. Project Vision
+
+The objective is not simply to build a booking website.
+
+The long-term vision is to develop a scalable vehicle rental platform capable of supporting growing businesses through modular architecture and modern software engineering practices.
+
+Future versions may include:
+
+- Progressive Web App (PWA)
+- Native mobile applications
+- Multi-branch operations
+- Fleet maintenance
+- Driver management
+- Dynamic pricing
+- Customer loyalty programs
+- GPS tracking
+- Advanced analytics
+- Third-party integrations
+
+The system architecture should support these future enhancements without requiring major structural changes.
+
+---
+
+# 3. Project Goals
+
+## Business Goals
+
+- Digitize the rental process
+- Reduce manual administrative work
+- Improve customer experience
+- Increase booking efficiency
+- Provide real-time rental information
+- Centralize business management
+
+---
+
+## Technical Goals
+
+The application should be:
+
+- Secure
+- Scalable
+- Responsive
+- Maintainable
+- Modular
+- High performance
+- API-driven
+- Easy to extend
+
+---
+
+## User Experience Goals
+
+The application should prioritize:
+
+- Simplicity
+- Speed
+- Accessibility
+- Professional appearance
+- Ease of navigation
+- Minimal learning curve
+
+---
+
+# 4. Target Users
+
+The application supports four primary user groups.
+
+## Guest
+
+Visitors who browse available vehicles before creating an account.
+
+Primary actions:
+
+- Browse vehicles
+- Search vehicles
+- View pricing
+- Register
+- Login
+
+---
+
+## Customer
+
+Registered users who rent vehicles.
+
+Primary actions:
+
+- Manage profile
+- Book vehicles
+- Complete payments
+- View booking history
+- Cancel bookings
+
+---
+
+## Administrator
+
+Staff responsible for daily operations.
+
+Primary actions:
+
+- Vehicle management
+- Booking management
+- Customer management
+- Payment management
+- Business configuration
+
+---
+
+## Business Owner
+
+Responsible for monitoring overall business performance.
+
+Primary actions:
+
+- Revenue monitoring
+- Business reports
+- Fleet utilization
+- Operational oversight
+
+---
+
+# 5. Technology Stack
 
 ## Frontend
 
 - Vue 3
 - TypeScript
-- Inertia.js
-- Tailwind CSS
-- Pinia
 - Vite
+- Vue Router
+- Pinia
+- Axios
+- Tailwind CSS
+- shadcn-vue (always use, to avoid hardcoding reusable components and maintain consistency. implement this first before deciding to create component.)
+- Lucide Vue
 
 ---
 
 ## Backend
 
 - Django
+- Django REST Framework
+- JWT Authentication (Simple JWT)
 
 ---
 
@@ -101,31 +235,15 @@ This MVP serves as a complete working prototype that can be demonstrated to clie
 
 ---
 
-## Authentication
-
-- Django Session Authentication
-- CSRF Protection
-
----
-
-## Payment Gateway
-
-- PayMongo (Philippines)
-- Stripe (Future International Expansion)
-
----
-
-## File Storage
+## Payments
 
 ### MVP
 
-- Local Storage
+- PayMongo
 
-### Production
+### Future
 
-- Amazon S3
-- Cloudflare R2
-- Backblaze B2
+- Stripe
 
 ---
 
@@ -144,647 +262,222 @@ This MVP serves as a complete working prototype that can be demonstrated to clie
 
 ---
 
-# 4. System Architecture
+# 6. System Architecture
+
+The project follows a decoupled client-server architecture.
 
 ```text
-Vue 3
-│
-├── TypeScript
-├── Inertia.js
-├── Tailwind CSS
-├── Pinia
-│
-▼
-Django
-│
-▼
+Client (Browser / Future PWA)
+
+        │
+
+        ▼
+
+Vue 3 Application
+
+(TypeScript)
+
+Vue Router
+
+Pinia
+
+Axios
+
+Tailwind CSS
+
+shadcn-vue
+
+        │
+
+        ▼
+
+REST API
+
+        │
+
+        ▼
+
+Django REST Framework
+
+        │
+
+Business Logic
+
+        │
+
+        ▼
+
 PostgreSQL
 ```
 
-Future Production Architecture
-
-```text
-Vue
-        │
-        ▼
-Inertia.js
-        │
-        ▼
-Nginx
-        │
-        ▼
-Gunicorn
-        │
-        ▼
-Django
-        │
-        ▼
-PostgreSQL
-        │
-        ▼
-Redis (Future)
-        │
-        ▼
-Celery (Future)
-```
+The frontend and backend communicate exclusively through RESTful APIs, allowing each application to evolve independently while maintaining a clear separation of concerns.
 
 ---
 
-# 5. User Roles
+# 7. Design Philosophy
 
-## Guest
+The project follows a minimalist and professional design philosophy.
 
-### Permissions
+Core principles include:
 
-- Browse vehicles
-- Search vehicles
-- View vehicle information
-- Register
-- Login
+- Function over decoration
+- Minimalist interface
+- Consistent layouts
+- Responsive design
+- Accessible interactions
+- Professional aesthetics
+- High usability
+- Fast user workflows
 
-### Restrictions
+The interface intentionally avoids unnecessary gradients, decorative shadows, excessive animations, and visual clutter.
 
-- Cannot book vehicles
-- Cannot make payments
-- Cannot access dashboard
-
----
-
-## Customer
-
-Can
-
-- Browse vehicles
-- Book rentals
-- Pay online
-- Manage profile
-- View bookings
-- Cancel pending bookings
-- View payment history
+Every component should exist because it serves a functional purpose.
 
 ---
 
-## Administrator
+# 8. Core Features (MVP)
 
-Can
+The MVP focuses on delivering a complete rental workflow.
 
-- Manage vehicles
-- Manage customers
-- Manage bookings
-- Configure business settings
-- View reports
-- Manage payments
+Core capabilities include:
 
----
-
-# 6. MVP Modules
-
-- Authentication
-- Customer Management
-- Vehicle Management
+- User Authentication
+- Customer Profiles
 - Vehicle Catalog
+- Vehicle Search & Filtering
 - Booking Management
-- Payment Integration
+- Online Payments
 - Customer Dashboard
 - Administrator Dashboard
-- Reports
 - Business Settings
+- Reporting
 
 ---
 
-# 7. Authentication Module
+# 9. Functional Modules Overview
 
-## Register
+The application is divided into independent modules to improve maintainability and future scalability.
 
-### Fields
+The major modules include:
 
-- First Name
-- Last Name
-- Email
-- Password
-- Confirm Password
-- Phone Number
-- Driver's License Number
+- Authentication Module
+- Customer Module
+- Vehicle Management Module
+- Booking Module
+- Payment Module
+- Dashboard Module
+- Reports Module
+- Business Settings Module
 
-### Validation
-
-- Email must be unique
-- Strong password
-- Minimum eight characters
-- Valid phone number
-- Driver's license required
+Each module is designed to operate independently while integrating seamlessly through the backend API.
 
 ---
 
-## Login
+# 10. Database Overview
 
-Fields
+The application uses PostgreSQL as its primary relational database.
 
-- Email
-- Password
-- Remember Me
+Core entities include:
 
----
-
-## Forgot Password
-
-- Email password reset
-
----
-
-## Logout
-
-- Destroy authenticated session
-
----
-
-# 8. Customer Module
-
-## Customer Profile
-
-Contains
-
-- Name
-- Email
-- Phone Number
-- Driver's License
-- Address
-- Profile Picture
-
-Editable
-
-- Phone Number
-- Address
-- Profile Picture
-
----
-
-## Booking History
-
-Display
-
-- Rental History
-- Current Rentals
-- Upcoming Rentals
-- Payment Records
-
----
-
-# 9. Vehicle Module
-
-## Vehicle Information
-
-Each vehicle contains
-
-- Images
-- Brand
-- Model
-- Year
-- Transmission
-- Fuel Type
-- Seats
-- Color
-- Mileage
-- Description
-- Rental Price
-- Status
-
----
-
-## Vehicle Status
-
-- Available
-- Booked
-- Maintenance
-- Inactive
-
----
-
-## Vehicle Detail Page
-
-Contains
-
-- Image Gallery
-- Specifications
-- Rental Price
-- Availability
-- Book Now Button
-
----
-
-# 10. Search & Filtering
-
-## Search
-
-- Keyword
-
----
-
-## Filters
-
-- Brand
-- Transmission
-- Fuel Type
-- Number of Seats
-- Price Range
-- Availability
-
----
-
-## Sorting
-
-- Newest
-- Lowest Price
-- Highest Price
-- Most Popular
-
----
-
-# 11. Booking Module
-
-Customer selects
-
-- Vehicle
-- Pickup Date
-- Return Date
-- Pickup Location
-- Return Location
-
----
-
-System Calculates
-
-- Rental Duration
-- Daily Rate
-- Insurance
-- Taxes
-- Total Cost
-
----
-
-Booking Status
-
-- Pending
-- Confirmed
-- Cancelled
-- Completed
-
----
-
-Booking Summary
-
-Display
-
-- Vehicle
-- Rental Period
-- Price Breakdown
-- Terms & Conditions
-- Payment Button
-
----
-
-# 12. Payment Module
-
-## Supported Payments
-
-- Credit Card
-- Debit Card
-- GCash (Supported Gateway)
-
----
-
-## Payment Status
-
-- Pending
-- Paid
-- Failed
-- Refunded
-
----
-
-Store Only
-
-- Transaction ID
-- Gateway Reference
-- Amount
-- Timestamp
-- Payment Status
-
-Never Store
-
-- Card Number
-- CVV
-- Expiration Date
-
----
-
-# 13. Customer Dashboard
-
-Sections
-
-- Upcoming Rentals
-- Booking History
-- Payment History
-- Invoices
-- Profile
-
----
-
-# 14. Administrator Dashboard
-
-Summary Cards
-
-- Total Vehicles
-- Available Vehicles
-- Active Rentals
-- Registered Customers
-- Revenue
-- Pending Bookings
-
----
-
-# 15. Vehicle Management
-
-Administrator can
-
-- Add Vehicle
-- Edit Vehicle
-- Delete Vehicle
-- Upload Images
-- Change Status
-- Update Rental Price
-
----
-
-# 16. Booking Management
-
-Administrator can
-
-- Approve Booking
-- Reject Booking
-- Cancel Booking
-- Complete Booking
-
-Booking Information
-
-- Customer
-- Vehicle
-- Rental Dates
-- Payment Status
-- Booking Status
-
----
-
-# 17. Reports
-
-Generate
-
-- Booking Reports
-- Revenue Reports
-- Vehicle Reports
-- Customer Reports
-
-Future
-
-- Export CSV
-- Export PDF
-
----
-
-# 18. Business Settings
-
-## Company Information
-
-- Business Name
-- Contact Number
-- Email
-- Address
-
----
-
-## Rental Settings
-
-- Minimum Rental Days
-- Maximum Rental Days
-- Grace Period
-- Late Fee
-- Tax Percentage
-
----
-
-# 19. Database Design
-
-## Core Tables
-
-```text
-users
-roles
-customer_profiles
-
-vehicles
-vehicle_images
-
-bookings
-booking_status
-
-payments
-payment_transactions
-
-business_settings
-```
-
----
-
-## Future Tables
-
-```text
-reviews
-notifications
-maintenance_records
-promotions
-coupons
-audit_logs
-vehicle_categories
-insurance_policies
-```
-
----
-
-# 20. UI Pages
-
-## Public Pages
-
-- Home
-- Vehicle Listing
-- Vehicle Details
-- About
-- Contact
-- Login
-- Register
-
----
-
-## Customer Pages
-
-- Dashboard
+- Users
+- Roles
+- Customer Profiles
+- Vehicles
+- Vehicle Images
 - Bookings
 - Payments
-- Profile
-
----
-
-## Administrator Pages
-
-- Dashboard
-- Vehicles
-- Bookings
-- Customers
-- Reports
 - Business Settings
 
----
-
-# 21. Non-Functional Requirements
-
-## Performance
-
-- Initial load under 2 seconds
-- Responsive on desktop, tablet, and mobile
-- Lazy-load vehicle images
-- Pagination for large datasets
-- Optimized images using WebP
+The database schema follows normalization principles to reduce redundancy while maintaining efficient query performance.
 
 ---
 
-## Security
+# 11. API Overview
 
-- HTTPS only
-- Django Session Authentication
-- CSRF Protection
-- XSS Protection
-- SQL Injection Protection through Django ORM
-- Server-side validation
-- Secure password hashing
+The frontend communicates with the backend exclusively through RESTful APIs provided by Django REST Framework.
+
+The API follows standard REST conventions, including:
+
+- Authentication endpoints
+- Customer endpoints
+- Vehicle endpoints
+- Booking endpoints
+- Payment endpoints
+- Reporting endpoints
+- Settings endpoints
+
+JWT authentication secures all protected endpoints.
+
+---
+
+# 12. Security Overview
+
+Security is treated as a primary project requirement.
+
+The system incorporates:
+
+- JWT Authentication
+- Password hashing
+- HTTPS
 - Role-based authorization
-- Secure file uploads
+- Server-side validation
+- SQL injection protection
+- XSS protection
+- Secure file handling
+- Rate limiting (Future)
 
 ---
 
-## Scalability
+# 13. Development Roadmap
 
-Designed to support
+The project will be developed incrementally.
 
-- Thousands of users
-- Thousands of vehicles
-- Large booking history
-- Future background processing using Redis and Celery
+Development phases include:
 
----
+1. Project Foundation
+2. Authentication
+3. Vehicle Management
+4. Booking System
+5. Payment Integration
+6. Customer Dashboard
+7. Administrator Dashboard
+8. Reports
+9. Deployment
+10. Production Optimization
 
-## Usability
-
-- Mobile-first design
-- Accessible forms
-- Consistent navigation
-- Simple booking workflow
-
----
-
-# 22. Development Roadmap
-
-## Phase 1 — Foundation
-
-- Project Setup
-- Authentication
-- User Roles
-- Database Setup
-- Global Layout
-- Navigation
+Each phase builds upon the previous one while maintaining a deployable application.
 
 ---
 
-## Phase 2 — Vehicle Catalog
+# 14. Future Expansion
 
-- Vehicle CRUD
-- Image Upload
-- Search
-- Filters
-- Vehicle Detail Page
+The project architecture is intentionally designed for long-term scalability.
 
----
+Future enhancements may include:
 
-## Phase 3 — Booking System
-
-- Availability Checking
-- Booking Creation
-- Booking Management
-
----
-
-## Phase 4 — Payments
-
-- PayMongo Integration
-- Payment Callback
-- Booking Confirmation
-- Payment History
-
----
-
-## Phase 5 — Dashboards
-
-- Customer Dashboard
-- Administrator Dashboard
-- Reports
-
----
-
-## Phase 6 — Production Ready
-
-- Responsive Improvements
-- Performance Optimization
-- Error Handling
-- Testing
-- Deployment
-
----
-
-# 23. Future Scope
-
-Not included in the MVP
-
-- Mobile Application
 - Progressive Web App (PWA)
-- Multi-branch Management
-- Driver Assignment
+- Native Android Application
+- Native iOS Application
+- Multi-branch Support
 - Fleet Maintenance
+- Driver Assignment
 - Dynamic Pricing
-- Coupons
-- Loyalty Rewards
+- Promotions
+- Customer Loyalty Program
+- Push Notifications
 - SMS Notifications
 - Email Notifications
+- Cloud Storage
 - GPS Tracking
-- Live Chat
-- AI Vehicle Recommendations
-- Multi-language Support
-- Multi-currency Support
-- Accounting Integration
+- AI-powered Recommendations
 - Advanced Analytics
 - Redis Caching
-- Celery Background Jobs
+- Celery Background Processing
 
 ---
 
-# MVP Summary
+# Summary
 
-The Car Rental Management System MVP is designed as a **vertical slice prototype**, demonstrating the complete customer journey from account registration to vehicle booking and payment.
+The Car Rental Management System is a scalable, API-driven rental management platform designed with modern software architecture and long-term maintainability in mind.
 
-The chosen stack emphasizes simplicity, maintainability, and scalability:
-
-- **Vue 3 + Inertia.js** provides a modern, SPA-like user experience without requiring a separate REST API.
-- **Django** handles business logic, authentication, validation, and server-side rendering through Inertia.
-- **PostgreSQL** offers a reliable and scalable relational database.
-- **Tailwind CSS** enables rapid development of a responsive, professional interface.
-- **Pinia** manages client-side state where appropriate.
-- **Django Session Authentication** provides secure authentication with built-in CSRF protection.
-
-This architecture minimizes complexity during the MVP phase while allowing the application to evolve into a production-ready platform with future additions such as Redis, Celery, cloud storage, Progressive Web App support, and advanced business features without significant architectural changes.
+The MVP delivers a complete end-to-end rental experience while providing a strong foundation for future business growth, additional services, and enterprise-level functionality.

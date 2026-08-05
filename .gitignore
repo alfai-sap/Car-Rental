@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+.venv/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.sqlite3
+
+# Media
+media/
+
+# Node
+node_modules/
+dist/
+frontend/dist/
+frontend/.vite/
+
+# Docker
+.docker/

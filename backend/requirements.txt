@@ -1,0 +1,16 @@
+# Django & API
+django>=4.2,<5.0
+djangorestframework>=3.14,<4.0
+django-cors-headers>=4.0,<5.0
+
+# Authentication
+djangorestframework-simplejwt>=5.3,<6.0
+
+# Database
+psycopg2-binary>=2.9,<3.0
+
+# Environment
+python-dotenv>=1.0,<2.0
+
+# File Uploads
+Pillow>=10.0,<12.0
