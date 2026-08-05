@@ -219,6 +219,7 @@ Primary actions:
 - shadcn-vue (always use, to avoid hardcoding reusable components and maintain consistency. implement this first before deciding to create component.)
 - Lucide Vue
 
+STRICTLY NO INERTIA js the Website is a standard SPA
 ---
 
 ## Backend

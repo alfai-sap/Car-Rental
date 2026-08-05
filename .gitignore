@@ -34,3 +34,7 @@ frontend/.vite/
 
 # Docker
 .docker/
+
+AGENTS.md
+ProjectDescription.md
+TechStack.md
