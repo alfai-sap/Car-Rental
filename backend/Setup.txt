@@ -1,0 +1,136 @@
+================================================================================
+            Car Rental Management System — Backend Setup Guide
+================================================================================
+
+PREREQUISITES
+-------------
+- Python 3.11+
+- PostgreSQL 17+
+- pip (Python package manager)
+
+
+PROJECT STRUCTURE
+-----------------
+backend/
+├── .venv/                  # Python virtual environment
+├── .env                    # Environment variables (DB, SECRET_KEY, DEBUG)
+├── requirements.txt        # Python dependencies
+├── manage.py               # Django management script
+├── config/                 # Django project settings
+│   ├── settings.py         # PostgreSQL, apps, static/media, auth config
+│   ├── urls.py             # Root URL routing
+│   ├── wsgi.py             # WSGI entry point
+│   └── asgi.py             # ASGI entry point
+├── apps/                   # Django applications
+│   ├── core/               # Shared utilities & base models
+│   ├── accounts/           # Custom User model (AbstractUser) + auth
+│   ├── vehicles/           # Vehicle management
+│   ├── bookings/           # Booking management
+│   ├── payments/           # Payment integration (PayMongo)
+│   └── reports/            # Reports & analytics
+├── static/                 # Static files (CSS, JS, images)
+├── media/                  # User-uploaded files (vehicle images)
+└── templates/              # Django HTML templates
+
+
+1. CREATE THE DATABASE
+----------------------
+Open a terminal and run:
+
+    psql -U postgres
+
+Then execute:
+
+    DROP DATABASE IF EXISTS car_rental;
+    CREATE DATABASE car_rental;
+    \q
+
+
+2. CONFIGURE ENVIRONMENT (.env)
+-------------------------------
+Create or edit backend/.env with the following:
+
+    # Django
+    SECRET_KEY=django-insecure-change-me-in-production
+    DEBUG=True
+    ALLOWED_HOSTS=localhost,127.0.0.1
+
+    # PostgreSQL
+    DB_NAME=car_rental
+    DB_USER=postgres
+    DB_PASSWORD=your_postgres_password
+    DB_HOST=localhost
+    DB_PORT=5432
+
+Replace your_postgres_password with your actual PostgreSQL password.
+
+
+3. SET UP VIRTUAL ENVIRONMENT & INSTALL DEPENDENCIES
+----------------------------------------------------
+From the backend/ directory:
+
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1          # Windows PowerShell
+    pip install -r requirements.txt
+
+
+   Installed packages:
+   - Django 5.2.17          (Web framework)
+   - psycopg2-binary 2.9.12 (PostgreSQL adapter)
+   - python-decouple 3.8    (Environment variable management)
+   - Pillow 12.3.0          (Image handling)
+
+
+4. RUN DATABASE MIGRATIONS
+--------------------------
+    python manage.py makemigrations accounts
+    python manage.py migrate
+
+
+5. CREATE A SUPERUSER (Admin)
+-----------------------------
+    python manage.py createsuperuser
+
+   Or use the non-interactive shortcut:
+
+    $env:DJANGO_SUPERUSER_PASSWORD="admin123"
+    $env:DJANGO_SUPERUSER_EMAIL="admin@carrental.com"
+    python manage.py createsuperuser --username admin --noinput
+
+
+6. START THE DEVELOPMENT SERVER
+-------------------------------
+    python manage.py runserver
+
+   The server starts at: http://127.0.0.1:8000/
+   Admin panel:          http://127.0.0.1:8000/admin/
+
+
+7. VERIFY THE SETUP
+-------------------
+    # Check for configuration errors
+    python manage.py check
+
+    # Verify database tables
+    psql -U postgres -d car_rental -c "\dt"
+
+
+QUICK START (ALL-IN-ONE)
+------------------------
+If the virtual environment is already set up:
+
+    cd backend
+    .\.venv\Scripts\Activate.ps1
+    python manage.py migrate
+    python manage.py runserver
+
+
+TROUBLESHOOTING
+---------------
+| Issue                          | Solution                                    |
+|--------------------------------|---------------------------------------------|
+| "role postgres does not exist" | Create the PostgreSQL user or use your own  |
+| "database already exists"      | Drop it first: DROP DATABASE car_rental;    |
+| "password authentication failed"| Check DB_PASSWORD in .env                  |
+| "port 8000 already in use"     | Use a different port: runserver 0.0.0.0:8080|
+| "No module named decouple"     | Run: pip install python-decouple            |

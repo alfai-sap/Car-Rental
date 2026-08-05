@@ -1,0 +1,89 @@
+# =============================================================================
+# Django Backend
+# =============================================================================
+
+# Environment variables — contains SECRET_KEY, database passwords
+.env
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Django collected static files
+staticfiles/
+
+# User-uploaded files (media)
+media/
+
+# Database files (local backups / SQLite)
+*.sqlite3
+*.db
+*.dump
+
+# Logs
+*.log
+logs/
+
+# =============================================================================
+# Node / Frontend (Vue + Vite)
+# =============================================================================
+
+node_modules/
+dist/
+build/
+
+# Vite
+.vite/
+
+# =============================================================================
+# IDE & Editor
+# =============================================================================
+
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Operating System
+# =============================================================================
+
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# Docker
+# =============================================================================
+
+docker-compose.override.yml
+.docker/
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+*.bak
+*.tmp
+*.temp
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+AGENTS.md
+ProjectDescription.md
