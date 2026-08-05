@@ -22,17 +22,20 @@ import { Car } from 'lucide-vue-next'
           Browse our fleet of quality vehicles and book your next journey.
           Simple, fast, and reliable car rental at your fingertips.
         </p>
-        <div class="mt-10">
+        <div class="mt-10 flex items-center justify-center gap-4">
+          <RouterLink to="/vehicles">
+            <Button size="lg">Browse Vehicles</Button>
+          </RouterLink>
           <RouterLink to="/register">
-            <Button size="lg">Get Started</Button>
+            <Button variant="outline" size="lg">Get Started</Button>
           </RouterLink>
         </div>
       </div>
     </section>
 
-    <!-- Placeholder Footer -->
+    <!-- Footer -->
     <footer class="py-8 text-center text-sm text-zinc-400">
-      <p>Vehicle listings coming soon.</p>
+      <p>&copy; {{ new Date().getFullYear() }} Car Rental. All rights reserved.</p>
     </footer>
   </div>
 </template>

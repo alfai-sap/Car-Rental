@@ -55,3 +55,11 @@ npm install
 npm run dev
 ```
 
+# Seed 18 vehicles with images
+```bash
+python manage.py seed_vehicles
+```
+# Clear all and re-seed fresh
+```bash
+python manage.py seed_vehicles --clear
+```
