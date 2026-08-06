@@ -63,6 +63,18 @@ function selectImage(index: number) {
   currentImageIndex.value = index
 }
 
+function zoomIn() {
+  lightboxZoom.value = Math.min(lightboxZoom.value + 0.5, 5)
+}
+
+function zoomOut() {
+  lightboxZoom.value = Math.max(lightboxZoom.value - 0.5, 0.5)
+}
+
+function resetZoom() {
+  lightboxZoom.value = 1
+}
+
 function formatPrice(price: string): string {
   return `₱${Number(price).toLocaleString('en-PH')}/day`
 }
@@ -216,7 +228,7 @@ onMounted(async () => {
         <button @click="zoomIn" class="absolute bottom-4 left-16 text-white/70 hover:text-white">
           <ZoomIn class="h-5 w-5" />
         </button>
-        <button @click="lightboxZoom = 1" class="absolute bottom-4 left-28 text-white/70 hover:text-white">
+        <button @click="resetZoom" class="absolute bottom-4 left-28 text-white/70 hover:text-white">
           <RotateCcw class="h-5 w-5" />
         </button>
         <img
