@@ -26,9 +26,9 @@ import { Car } from 'lucide-vue-next'
           <RouterLink to="/vehicles">
             <Button size="lg">Browse Vehicles</Button>
           </RouterLink>
-          <RouterLink to="/register">
+          <!-- <RouterLink to="/register">
             <Button variant="outline" size="lg">Get Started</Button>
-          </RouterLink>
+          </RouterLink> -->
         </div>
       </div>
     </section>

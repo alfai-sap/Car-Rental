@@ -1,9 +1,10 @@
 from django.utils import timezone
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.bookings.models import Booking
 from apps.bookings.serializers import BookingSerializer, BookingStatusUpdateSerializer, DashboardBookingSerializer, AdminDashboardBookingSerializer
@@ -14,12 +15,17 @@ class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.select_related('customer', 'vehicle').prefetch_related('vehicle__images')
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['vehicle', 'status']
+    ordering_fields = ['created_at', 'pickup_date']
+    ordering = ['-created_at']
 
     def get_queryset(self):
+        qs = super().get_queryset() if hasattr(super(), 'get_queryset') else Booking.objects.select_related('customer', 'vehicle').prefetch_related('vehicle__images')
         user = self.request.user
         if user.is_staff:
-            return Booking.objects.select_related('customer', 'vehicle').all()
-        return Booking.objects.filter(customer=user)
+            return qs
+        return qs.filter(customer=user)
 
     def perform_create(self, serializer):
         serializer.save(customer=self.request.user)
@@ -39,6 +45,9 @@ class BookingViewSet(viewsets.ModelViewSet):
         if booking.status not in ['pending_approval', 'approved', 'awaiting_payment']:
             return Response({'detail': 'This booking cannot be cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
         booking.status = 'cancelled'
+        reason = request.data.get('cancellation_reason', '')
+        if reason:
+            booking.rejection_reason = reason
         booking.save()
         return Response(BookingSerializer(booking).data)
 

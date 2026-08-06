@@ -6,14 +6,19 @@ from apps.bookings.models import Booking
 class BookingSerializer(serializers.ModelSerializer):
     customer_email = serializers.EmailField(source='customer.email', read_only=True)
     customer_name = serializers.SerializerMethodField(read_only=True)
+    customer_phone = serializers.CharField(source='customer.phone', read_only=True)
+    customer_identity_docs = serializers.SerializerMethodField(read_only=True)
     vehicle_name = serializers.SerializerMethodField(read_only=True)
+    vehicle_images = serializers.SerializerMethodField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Booking
         fields = [
             'id', 'booking_number', 'customer', 'customer_email', 'customer_name',
-            'vehicle', 'vehicle_name', 'pickup_date', 'return_date', 'pickup_time', 'return_time',
+            'customer_phone', 'customer_identity_docs',
+            'vehicle', 'vehicle_name', 'vehicle_images',
+            'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'created_at', 'updated_at',
         ]
@@ -25,8 +30,34 @@ class BookingSerializer(serializers.ModelSerializer):
     def get_customer_name(self, obj):
         return f"{obj.customer.first_name} {obj.customer.last_name}"
 
+    def get_customer_identity_docs(self, obj):
+        docs = obj.customer.identity_documents.all()
+        request = self.context.get('request')
+        result = []
+        for doc in docs:
+            item = {
+                'id': doc.id,
+                'document_type': doc.document_type,
+                'document_number': doc.document_number,
+                'front_image': request.build_absolute_uri(doc.front_image.url) if request and doc.front_image else None,
+                'back_image': request.build_absolute_uri(doc.back_image.url) if request and doc.back_image else None,
+            }
+            result.append(item)
+        return result
+
     def get_vehicle_name(self, obj):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
+
+    def get_vehicle_images(self, obj):
+        request = self.context.get('request')
+        images = []
+        for img in obj.vehicle.images.all():
+            images.append({
+                'id': img.id,
+                'image': request.build_absolute_uri(img.image.url) if request else img.image.url,
+                'is_primary': img.is_primary,
+            })
+        return images
 
     def validate(self, data):
         if self.instance is None:  # create only

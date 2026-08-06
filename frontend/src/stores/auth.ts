@@ -10,6 +10,7 @@ interface User {
   phone: string
   is_verified: boolean
   is_staff: boolean
+  identity_locked?: boolean
 }
 
 export const useAuthStore = defineStore('auth', () => {

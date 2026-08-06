@@ -97,7 +97,7 @@ onMounted(async () => {
       checkingBooking.value = true
       try {
         const bookingRes = await api.get('/bookings/', { params: { vehicle: id } })
-        const userBookings: Array<{ id: number; status: string; status_display: string; booking_number: string; vehicle: number }> = bookingRes.data
+        const userBookings: Array<{ id: number; status: string; status_display: string; booking_number: string; vehicle: number }> = bookingRes.data.results || bookingRes.data
         const active = userBookings.find(b =>
           b.vehicle === Number(id) &&
           ['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active'].includes(b.status)
@@ -241,8 +241,12 @@ onMounted(async () => {
               <Button class="w-full" disabled>Checking...</Button>
             </template>
             <template v-else-if="existingBooking">
+              <div class="rounded-md bg-amber-50 border border-amber-200 p-3 text-center mb-3">
+                <p class="text-xs text-amber-700 font-medium mb-1">You have sent a booking request for this vehicle</p>
+                <p class="text-xs text-amber-600">Booking will be available again once your request is cancelled, rejected, or completed.</p>
+              </div>
               <div class="rounded-md bg-zinc-50 border border-zinc-200 p-3 text-center">
-                <p class="text-xs text-zinc-500 mb-1">Your Booking Status</p>
+                <p class="text-xs text-zinc-500 mb-1">Booking Status</p>
                 <p class="text-sm font-semibold text-zinc-900">{{ existingBooking.status_display }}</p>
                 <p class="text-xs text-zinc-400 mt-1">{{ existingBooking.booking_number }}</p>
               </div>

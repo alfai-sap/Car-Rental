@@ -27,6 +27,16 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
+# ── Identity lock constants ──
+ACTIVE_BOOKING_STATUSES = ['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active']
+LOCKED_MESSAGE = 'Identity information cannot be modified while you have an active booking.'
+
+
+def has_active_bookings(user):
+    """Return True if the user has any booking that locks identity documents."""
+    from apps.bookings.models import Booking
+    return Booking.objects.filter(customer=user, status__in=ACTIVE_BOOKING_STATUSES).exists()
+
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -147,7 +157,9 @@ class MeView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        data = UserSerializer(request.user).data
+        data['identity_locked'] = has_active_bookings(request.user)
+        return Response(data)
 
 
 class IdentityDocumentUploadView(views.APIView):
@@ -159,6 +171,8 @@ class IdentityDocumentUploadView(views.APIView):
         return Response(IdentityDocumentSerializer(docs, many=True, context={'request': request}).data)
 
     def post(self, request):
+        if has_active_bookings(request.user):
+            return Response({'detail': LOCKED_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         serializer = IdentityDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save(user=request.user)
@@ -175,6 +189,8 @@ class IdentityDocumentDetailView(views.APIView):
         return Response(IdentityDocumentSerializer(doc, context={'request': request}).data)
 
     def put(self, request, pk):
+        if has_active_bookings(request.user):
+            return Response({'detail': LOCKED_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         doc = get_object_or_404(IdentityDocument, pk=pk, user=request.user)
         serializer = IdentityDocumentSerializer(doc, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
@@ -183,6 +199,8 @@ class IdentityDocumentDetailView(views.APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
+        if has_active_bookings(request.user):
+            return Response({'detail': LOCKED_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
         doc = get_object_or_404(IdentityDocument, pk=pk, user=request.user)
         doc.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

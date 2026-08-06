@@ -271,12 +271,18 @@ onMounted(async () => {
         </dl>
       </section>
 
+      <!-- Identity Lock Banner -->
+      <div v-if="auth.user?.identity_locked" class="rounded-md border border-amber-200 bg-amber-50 p-4">
+        <p class="text-sm text-amber-800 font-medium">Identity information is locked</p>
+        <p class="text-sm text-amber-600 mt-1">You cannot modify your identity documents while you have an active booking. Changes will be allowed once your bookings are completed, cancelled, or rejected.</p>
+      </div>
+
       <!-- Identity Documents -->
       <section class="rounded-md border border-zinc-200 bg-white p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-zinc-900">Identity Documents</h2>
           <button
-            v-if="!showAddForm && editingDocId === null"
+            v-if="!showAddForm && editingDocId === null && !auth.user?.identity_locked"
             type="button"
             class="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline"
             @click="showAddForm = true"
@@ -372,13 +378,16 @@ onMounted(async () => {
 
               <!-- Buttons -->
               <div class="flex gap-2 pt-2">
-                <template v-if="editingDocId === doc.id">
+                <template v-if="editingDocId === doc.id && !auth.user?.identity_locked">
                   <Button type="button" @click="submitDocument" :disabled="submittingDoc" size="sm">
                     {{ submittingDoc ? 'Saving...' : 'Save Changes' }}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" @click="closeForm()">Cancel</Button>
                 </template>
-                <template v-else>
+                <template v-else-if="editingDocId === doc.id">
+                  <Button type="button" variant="ghost" size="sm" @click="closeForm()">Close</Button>
+                </template>
+                <template v-else-if="!auth.user?.identity_locked">
                   <Button variant="outline" size="sm" @click="startEdit(doc)">
                     <Pencil class="h-3.5 w-3.5 mr-1.5" /> Edit
                   </Button>

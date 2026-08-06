@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   Clock, CheckCircle, XCircle, Car, AlertCircle,
-  ChevronDown, ChevronUp, ExternalLink,
+  ChevronDown, ChevronUp, ExternalLink, ChevronLeft, ChevronRight, Search, ListFilter, ArrowUpDown,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -66,11 +66,73 @@ const STATUS_TABS = [
 ] as const
 
 const activeTab = ref<string>('all')
+const currentPage = ref(1)
+const perPage = 5
+const searchQuery = ref('')
+const filterDropdownOpen = ref(false)
+const sortDropdownOpen = ref(false)
+const sortBy = ref('newest')
+
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'Newest First' },
+  { key: 'oldest', label: 'Oldest First' },
+  { key: 'pickup_asc', label: 'Pickup Date (Earliest)' },
+  { key: 'pickup_desc', label: 'Pickup Date (Latest)' },
+  { key: 'price_high', label: 'Price (High to Low)' },
+  { key: 'price_low', label: 'Price (Low to High)' },
+]
 
 const filteredBookings = computed(() => {
-  if (activeTab.value === 'all') return bookings.value
-  return bookings.value.filter(b => b.status === activeTab.value)
+  let result = bookings.value
+  if (activeTab.value !== 'all') {
+    result = result.filter(b => b.status === activeTab.value)
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(b =>
+      b.booking_number.toLowerCase().includes(q) ||
+      b.vehicle_name.toLowerCase().includes(q)
+    )
+  }
+  return result
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredBookings.value.length / perPage)))
+
+const sortedBookings = computed(() => {
+  const arr = [...filteredBookings.value]
+  switch (sortBy.value) {
+    case 'oldest': return arr.reverse()
+    case 'pickup_asc': return arr.sort((a, b) => a.pickup_date.localeCompare(b.pickup_date))
+    case 'pickup_desc': return arr.sort((a, b) => b.pickup_date.localeCompare(a.pickup_date))
+    case 'price_high': return arr.sort((a, b) => Number(b.estimated_total) - Number(a.estimated_total))
+    case 'price_low': return arr.sort((a, b) => Number(a.estimated_total) - Number(b.estimated_total))
+    default: return arr // newest first (already sorted from API)
+  }
+})
+
+const paginatedBookings = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return sortedBookings.value.slice(start, start + perPage)
+})
+
+function goToPage(page: number) {
+  currentPage.value = Math.max(1, Math.min(page, totalPages.value))
+}
+
+// Reset page when tab changes
+watch(activeTab, () => { currentPage.value = 1 })
+
+function selectFilter(key: string) {
+  activeTab.value = key
+  filterDropdownOpen.value = false
+}
+
+function selectSort(key: string) {
+  sortBy.value = key
+  sortDropdownOpen.value = false
+  currentPage.value = 1
+}
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -170,9 +232,14 @@ onMounted(() => {
 
     <main class="flex-1 max-w-5xl mx-auto px-4 pt-24 pb-16 w-full">
       <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-2xl font-semibold text-zinc-900">My Dashboard</h1>
-        <p class="text-sm text-zinc-500 mt-1">Track your booking requests and rental history.</p>
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-2xl font-semibold text-zinc-900">My Dashboard</h1>
+          <p class="text-sm text-zinc-500 mt-1">Track your booking requests and rental history.</p>
+        </div>
+        <RouterLink to="/vehicles" class="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900">
+          <Search class="h-4 w-4" /> Browse Vehicles
+        </RouterLink>
       </div>
 
       <!-- Loading -->
@@ -222,31 +289,84 @@ onMounted(() => {
           </RouterLink>
         </div>
 
-        <!-- Status Tabs -->
-        <div v-if="bookings.length > 0" class="flex flex-wrap gap-1.5 mb-6">
-          <button
-            v-for="tab in STATUS_TABS"
-            :key="tab.key"
-            @click="activeTab = tab.key"
-            class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-            :class="activeTab === tab.key
-              ? 'bg-zinc-900 text-white'
-              : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50'"
-          >
-            {{ tab.label }}
-            <span
-              v-if="tab.key !== 'all' && summary"
-              class="ml-1 opacity-60"
+        <!-- Search + Filter -->
+        <div v-if="bookings.length > 0" class="flex items-center gap-3 mb-6">
+          <!-- Search -->
+          <div class="relative flex-1 max-w-xs">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search bookings..."
+              class="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            />
+          </div>
+
+          <!-- Status Filter Dropdown -->
+          <div class="relative">
+            <button
+              @click="filterDropdownOpen = !filterDropdownOpen"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
             >
-              ({{ (summary as Record<string, number>)[tab.key] || 0 }})
-            </span>
-          </button>
+              <ListFilter class="h-4 w-4 text-zinc-400" />
+              <span>{{ STATUS_TABS.find(t => t.key === activeTab)?.label || 'All' }}</span>
+              <span v-if="summary && activeTab !== 'all'" class="text-xs text-zinc-400">({{ (summary as Record<string, number>)[activeTab] || 0 }})</span>
+              <ChevronDown class="h-3.5 w-3.5 text-zinc-400" />
+            </button>
+            <div
+              v-if="filterDropdownOpen"
+              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              @mouseleave="filterDropdownOpen = false"
+            >
+              <div class="p-1">
+                <button
+                  v-for="tab in STATUS_TABS"
+                  :key="tab.key"
+                  @click="selectFilter(tab.key)"
+                  class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-zinc-100 transition-colors"
+                  :class="activeTab === tab.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600'"
+                >
+                  {{ tab.label }}
+                  <span v-if="tab.key !== 'all' && summary" class="text-xs text-zinc-400 ml-1">({{ (summary as Record<string, number>)[tab.key] || 0 }})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sort Dropdown -->
+          <div class="relative">
+            <button
+              @click="sortDropdownOpen = !sortDropdownOpen"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <ArrowUpDown class="h-4 w-4 text-zinc-400" />
+              <span>{{ SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort' }}</span>
+              <ChevronDown class="h-3.5 w-3.5 text-zinc-400" />
+            </button>
+            <div
+              v-if="sortDropdownOpen"
+              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              @mouseleave="sortDropdownOpen = false"
+            >
+              <div class="p-1">
+                <button
+                  v-for="opt in SORT_OPTIONS"
+                  :key="opt.key"
+                  @click="selectSort(opt.key)"
+                  class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-zinc-100 transition-colors"
+                  :class="sortBy === opt.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600'"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Bookings List -->
-        <div v-if="filteredBookings.length > 0" class="space-y-3">
+        <div v-if="paginatedBookings.length > 0" class="space-y-3">
           <div
-            v-for="booking in filteredBookings"
+            v-for="booking in paginatedBookings"
             :key="booking.id"
             class="rounded-md border border-zinc-200 bg-white overflow-hidden"
           >
@@ -325,41 +445,46 @@ onMounted(() => {
                 >
                   <ExternalLink class="h-3 w-3" /> View Vehicle
                 </RouterLink>
-
                 <RouterLink
                   :to="`/transactions/${booking.id}`"
-                  class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900"
+                  class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 ml-auto"
                 >
                   <ExternalLink class="h-3 w-3" /> View Transaction
                 </RouterLink>
-
-                <!-- Cancel button (for pending_approval, approved, awaiting_payment) -->
-                <button
-                  v-if="['pending_approval', 'approved', 'awaiting_payment'].includes(booking.status)"
-                  @click="cancelBooking(booking.id)"
-                  :disabled="cancellingId === booking.id"
-                  class="text-xs text-red-600 hover:text-red-800 font-medium ml-auto"
-                >
-                  {{ cancellingId === booking.id ? 'Cancelling...' : 'Cancel' }}
-                </button>
-
-                <!-- Pay Now button (for approved, awaiting_payment) -->
-                <Button
-                  v-if="booking.status === 'awaiting_payment'"
-                  size="sm"
-                  :disabled="payingId === booking.id"
-                  @click="initiatePayment(booking.id)"
-                  class="text-xs h-7"
-                >
-                  {{ payingId === booking.id ? '...' : 'Pay Now' }}
-                </Button>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- Pagination -->
+        <div v-if="filteredBookings.length > 0 && totalPages > 1" class="flex items-center justify-center gap-2 mt-6">
+          <button
+            @click="goToPage(currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="h-8 w-8 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-default"
+          >
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            @click="goToPage(page)"
+            class="h-8 w-8 flex items-center justify-center rounded text-xs font-medium transition-colors"
+            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+          >
+            {{ page }}
+          </button>
+          <button
+            @click="goToPage(currentPage + 1)"
+            :disabled="currentPage === totalPages"
+            class="h-8 w-8 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-default"
+          >
+            <ChevronRight class="h-4 w-4" />
+          </button>
+        </div>
+
         <!-- Empty filtered state -->
-        <div v-else-if="bookings.length > 0" class="text-center py-12">
+        <div v-else-if="filteredBookings.length === 0 && bookings.length > 0" class="text-center py-12">
           <p class="text-sm text-zinc-500">No bookings with this status.</p>
         </div>
       </template>

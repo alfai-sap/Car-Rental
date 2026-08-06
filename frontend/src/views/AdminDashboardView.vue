@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   Clock, CheckCircle, XCircle, Car, AlertCircle, Shield,
-  ChevronDown, ChevronUp, User, Search,
+  ChevronDown, ChevronUp, User, Search, ChevronLeft, ChevronRight, ListFilter, ArrowUpDown,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -71,6 +71,20 @@ const STATUS_TABS = [
 ] as const
 
 const activeTab = ref<string>('pending_approval')
+const currentPage = ref(1)
+const perPage = 5
+const filterDropdownOpen = ref(false)
+const sortDropdownOpen = ref(false)
+const sortBy = ref('newest')
+
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'Newest First' },
+  { key: 'oldest', label: 'Oldest First' },
+  { key: 'pickup_asc', label: 'Pickup Date (Earliest)' },
+  { key: 'pickup_desc', label: 'Pickup Date (Latest)' },
+  { key: 'price_high', label: 'Price (High to Low)' },
+  { key: 'price_low', label: 'Price (Low to High)' },
+]
 
 const filteredBookings = computed(() => {
   let result = bookings.value
@@ -88,6 +102,42 @@ const filteredBookings = computed(() => {
   }
   return result
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredBookings.value.length / perPage)))
+
+const sortedBookings = computed(() => {
+  const arr = [...filteredBookings.value]
+  switch (sortBy.value) {
+    case 'oldest': return arr.reverse()
+    case 'pickup_asc': return arr.sort((a, b) => a.pickup_date.localeCompare(b.pickup_date))
+    case 'pickup_desc': return arr.sort((a, b) => b.pickup_date.localeCompare(a.pickup_date))
+    case 'price_high': return arr.sort((a, b) => Number(b.estimated_total) - Number(a.estimated_total))
+    case 'price_low': return arr.sort((a, b) => Number(a.estimated_total) - Number(b.estimated_total))
+    default: return arr
+  }
+})
+
+const paginatedBookings = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return sortedBookings.value.slice(start, start + perPage)
+})
+
+function goToPage(page: number) {
+  currentPage.value = Math.max(1, Math.min(page, totalPages.value))
+}
+
+function selectFilter(key: string) {
+  activeTab.value = key
+  filterDropdownOpen.value = false
+}
+
+function selectSort(key: string) {
+  sortBy.value = key
+  sortDropdownOpen.value = false
+  currentPage.value = 1
+}
+
+watch(activeTab, () => { currentPage.value = 1 })
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -270,46 +320,83 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Search + Tabs -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <!-- Status Tabs -->
-          <div class="flex flex-wrap gap-1.5">
-            <button
-              v-for="tab in STATUS_TABS"
-              :key="tab.key"
-              @click="activeTab = tab.key"
-              class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-              :class="[
-                activeTab === tab.key
-                  ? (tab.highlight ? 'bg-amber-500 text-white' : 'bg-zinc-900 text-white')
-                  : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50',
-                tab.highlight && activeTab !== tab.key ? 'border-amber-300' : '',
-              ]"
-            >
-              {{ tab.label }}
-              <span
-                v-if="tab.key !== 'all' && summary"
-                class="ml-1 opacity-60"
-              >
-                ({{ (summary as Record<string, number>)[tab.key] || 0 }})
-              </span>
-            </button>
-          </div>
-
+        <!-- Search + Filter -->
+        <div class="flex items-center gap-3 mb-6">
           <!-- Search -->
-          <div class="relative">
+          <div class="relative flex-1 max-w-xs">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
             <input
               v-model="searchQuery"
               type="text"
               placeholder="Search bookings..."
-              class="h-9 w-full sm:w-64 rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              class="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
             />
+          </div>
+
+          <!-- Status Filter Dropdown -->
+          <div class="relative">
+            <button
+              @click="filterDropdownOpen = !filterDropdownOpen"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <ListFilter class="h-4 w-4 text-zinc-400" />
+              <span>{{ STATUS_TABS.find(t => t.key === activeTab)?.label || 'All' }}</span>
+              <span v-if="summary && activeTab !== 'all'" class="text-xs text-zinc-400">({{ (summary as Record<string, number>)[activeTab] || 0 }})</span>
+              <ChevronDown class="h-3.5 w-3.5 text-zinc-400" />
+            </button>
+            <div
+              v-if="filterDropdownOpen"
+              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              @mouseleave="filterDropdownOpen = false"
+            >
+              <div class="p-1">
+                <button
+                  v-for="tab in STATUS_TABS"
+                  :key="tab.key"
+                  @click="selectFilter(tab.key)"
+                  class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-zinc-100 transition-colors"
+                  :class="[activeTab === tab.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600',
+                    tab.highlight && activeTab !== tab.key ? 'text-amber-600' : '']"
+                >
+                  {{ tab.label }}
+                  <span v-if="tab.key !== 'all' && summary" class="text-xs text-zinc-400 ml-1">({{ (summary as Record<string, number>)[tab.key] || 0 }})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sort Dropdown -->
+          <div class="relative">
+            <button
+              @click="sortDropdownOpen = !sortDropdownOpen"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <ArrowUpDown class="h-4 w-4 text-zinc-400" />
+              <span>{{ SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort' }}</span>
+              <ChevronDown class="h-3.5 w-3.5 text-zinc-400" />
+            </button>
+            <div
+              v-if="sortDropdownOpen"
+              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              @mouseleave="sortDropdownOpen = false"
+            >
+              <div class="p-1">
+                <button
+                  v-for="opt in SORT_OPTIONS"
+                  :key="opt.key"
+                  @click="selectSort(opt.key)"
+                  class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-zinc-100 transition-colors"
+                  :class="sortBy === opt.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600'"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Bookings Table -->
-        <div v-if="filteredBookings.length > 0" class="rounded-md border border-zinc-200 bg-white overflow-hidden">
+        <div v-if="paginatedBookings.length > 0" class="rounded-md border border-zinc-200 bg-white overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
@@ -324,7 +411,7 @@ onMounted(async () => {
                 </tr>
               </thead>
               <tbody>
-                <template v-for="booking in filteredBookings" :key="booking.id">
+                <template v-for="booking in paginatedBookings" :key="booking.id">
                   <tr
                     @click="toggleExpanded(booking.id)"
                     class="border-b border-zinc-100 hover:bg-zinc-50 cursor-pointer transition-colors"
@@ -359,70 +446,12 @@ onMounted(async () => {
                       </span>
                     </td>
                     <td class="px-4 py-3 text-right" @click.stop>
-                      <!-- View Transaction link -->
                       <RouterLink
                         :to="`/admin/transactions/${booking.id}`"
-                        class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 mr-2"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
                       >
                         View
                       </RouterLink>
-
-                      <!-- Pending Approval actions -->
-                      <div v-if="booking.status === 'pending_approval'" class="flex items-center justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          :disabled="processingId === booking.id"
-                          @click="approveBooking(booking.id)"
-                          class="text-xs h-7"
-                        >
-                          {{ processingId === booking.id ? '...' : 'Approve' }}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          :disabled="processingId === booking.id"
-                          @click="showRejectDialog = booking.id; rejectReason = ''"
-                          class="text-xs h-7 text-red-600 hover:bg-red-50"
-                        >
-                          Reject
-                        </Button>
-                      </div>
-
-                      <!-- Awaiting Payment actions -->
-                      <Button
-                        v-else-if="booking.status === 'awaiting_payment'"
-                        size="sm"
-                        :disabled="processingId === booking.id"
-                        @click="confirmBooking(booking.id)"
-                        class="text-xs h-7"
-                      >
-                        {{ processingId === booking.id ? '...' : 'Confirm' }}
-                      </Button>
-
-                      <!-- Confirmed → Mark Active -->
-                      <Button
-                        v-else-if="booking.status === 'confirmed'"
-                        size="sm"
-                        :disabled="processingId === booking.id"
-                        @click="markActive(booking.id)"
-                        class="text-xs h-7"
-                      >
-                        {{ processingId === booking.id ? '...' : 'Mark Active' }}
-                      </Button>
-
-                      <!-- Active → Mark Complete -->
-                      <Button
-                        v-else-if="booking.status === 'active'"
-                        size="sm"
-                        :disabled="processingId === booking.id"
-                        @click="markComplete(booking.id)"
-                        class="text-xs h-7"
-                      >
-                        {{ processingId === booking.id ? '...' : 'Complete' }}
-                      </Button>
-
-                      <!-- Other statuses — no action -->
-                      <span v-else class="text-xs text-zinc-400">—</span>
                     </td>
                   </tr>
 
@@ -500,8 +529,35 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Pagination -->
+        <div v-if="filteredBookings.length > 0 && totalPages > 1" class="flex items-center justify-center gap-2 mt-6">
+          <button
+            @click="goToPage(currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="h-8 w-8 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-default"
+          >
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            @click="goToPage(page)"
+            class="h-8 w-8 flex items-center justify-center rounded text-xs font-medium transition-colors"
+            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+          >
+            {{ page }}
+          </button>
+          <button
+            @click="goToPage(currentPage + 1)"
+            :disabled="currentPage === totalPages"
+            class="h-8 w-8 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-default"
+          >
+            <ChevronRight class="h-4 w-4" />
+          </button>
+        </div>
+
         <!-- Empty state -->
-        <div v-else class="text-center py-16">
+        <div v-else-if="filteredBookings.length === 0" class="text-center py-16">
           <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-100 mb-4">
             <Car class="h-8 w-8 text-zinc-400" />
           </div>

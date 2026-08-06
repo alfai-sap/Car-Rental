@@ -13,14 +13,31 @@ import {
 const route = useRoute()
 const auth = useAuthStore()
 
+interface IdentityDoc {
+  id: number
+  document_type: string
+  document_number: string
+  front_image: string | null
+  back_image: string | null
+}
+
+interface VehicleImage {
+  id: number
+  image: string
+  is_primary: boolean
+}
+
 interface Booking {
   id: number
   booking_number: string
   customer: number
   customer_email: string
   customer_name: string
+  customer_phone: string
+  customer_identity_docs: IdentityDoc[]
   vehicle: number
   vehicle_name: string
+  vehicle_images: VehicleImage[]
   pickup_date: string
   return_date: string
   pickup_time: string
@@ -40,8 +57,21 @@ const booking = ref<Booking | null>(null)
 const loading = ref(true)
 const error = ref('')
 const processing = ref(false)
-const rejectReason = ref('')
+const rejectReasonType = ref('')
+const rejectReasonCustom = ref('')
 const showRejectDialog = ref(false)
+const showRejectConfirmModal = ref(false)
+const lightboxImage = ref('')
+
+const REJECT_REASONS = [
+  { value: '', label: 'Select a reason...' },
+  { value: 'vehicle_unavailable', label: 'Vehicle unavailable for selected dates' },
+  { value: 'invalid_documents', label: 'Driver documents invalid or expired' },
+  { value: 'incomplete_info', label: 'Customer information incomplete' },
+  { value: 'policy_violation', label: 'Against business policy' },
+  { value: 'unreachable', label: 'Unable to contact customer' },
+  { value: 'other', label: 'Other — specify below' },
+]
 
 const STEPS = [
   { key: 'request', label: 'Request', icon: Clock },
@@ -76,9 +106,16 @@ function stepState(stepIndex: number, currentIdx: number, status: string): 'done
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
+  if (!dateStr) return '—'
+  if (dateStr.includes('T')) return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 function formatTime(timeStr: string): string {
@@ -98,13 +135,44 @@ async function approveBooking() {
   } finally { processing.value = false }
 }
 
+const rejectReasonText = computed(() => {
+  if (rejectReasonType.value === 'other') return rejectReasonCustom.value
+  const found = REJECT_REASONS.find(r => r.value === rejectReasonType.value)
+  return found && found.value ? found.label : ''
+})
+
+const canConfirmReject = computed(() => {
+  if (!rejectReasonType.value) return false
+  if (rejectReasonType.value === 'other') return rejectReasonCustom.value.trim().length > 0
+  return true
+})
+
+function openRejectModal() {
+  rejectReasonType.value = ''
+  rejectReasonCustom.value = ''
+  showRejectDialog.value = true
+  showRejectConfirmModal.value = false
+}
+
+function closeRejectModal() {
+  showRejectDialog.value = false
+  showRejectConfirmModal.value = false
+}
+
+function confirmRejectClick() {
+  if (!canConfirmReject.value) return
+  showRejectConfirmModal.value = true
+}
+
 async function rejectBooking() {
-  if (!booking.value || !rejectReason.value.trim()) return
+  if (!booking.value || !canConfirmReject.value) return
   processing.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/reject/`, { rejection_reason: rejectReason.value })
+    await api.post(`/bookings/${booking.value.id}/reject/`, { rejection_reason: rejectReasonText.value })
     showRejectDialog.value = false
-    rejectReason.value = ''
+    showRejectConfirmModal.value = false
+    rejectReasonType.value = ''
+    rejectReasonCustom.value = ''
     await fetchBooking()
   } finally { processing.value = false }
 }
@@ -205,35 +273,28 @@ onMounted(fetchBooking)
         </div>
 
         <!-- Progress Steps -->
-        <div class="rounded-md border border-zinc-200 bg-white p-6 mb-8">
-          <div class="flex items-start justify-between overflow-x-auto gap-2">
-            <div
-              v-for="(step, idx) in STEPS"
-              :key="step.key"
-              class="flex flex-col items-center min-w-[60px] flex-shrink-0"
-              :class="idx > 0 ? 'flex-1' : ''"
-            >
-              <div v-if="idx > 0" class="w-full h-0.5 -mt-0.5 mb-2" :class="{
-                'bg-zinc-900': stepState(idx, currentIdx, booking.status) === 'done',
-                'bg-zinc-200': stepState(idx, currentIdx, booking.status) === 'upcoming',
-                'bg-zinc-300': stepState(idx, currentIdx, booking.status) === 'current',
-                'bg-red-300': stepState(idx, currentIdx, booking.status) === 'rejected' || stepState(idx, currentIdx, booking.status) === 'cancelled',
-              }" />
-              <div
-                class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium"
-                :class="{
+        <div class="rounded-md border border-zinc-200 bg-white p-6 mb-8 overflow-x-auto">
+          <div class="flex items-center min-w-[600px]">
+            <template v-for="(step, idx) in STEPS" :key="step.key">
+              <div class="flex flex-col items-center" style="width:60px;flex-shrink:0">
+                <div class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium" :class="{
                   'bg-zinc-900 text-white': stepState(idx, currentIdx, booking.status) === 'done' || stepState(idx, currentIdx, booking.status) === 'current',
                   'bg-zinc-100 text-zinc-400': stepState(idx, currentIdx, booking.status) === 'upcoming',
                   'bg-red-100 text-red-600': stepState(idx, currentIdx, booking.status) === 'rejected',
                   'bg-zinc-200 text-zinc-500 line-through': stepState(idx, currentIdx, booking.status) === 'cancelled',
-                }"
-              >
-                <Check v-if="stepState(idx, currentIdx, booking.status) === 'done'" class="h-4 w-4" />
-                <XCircle v-else-if="stepState(idx, currentIdx, booking.status) === 'rejected' || stepState(idx, currentIdx, booking.status) === 'cancelled'" class="h-4 w-4" />
-                <component :is="step.icon" v-else class="h-4 w-4" />
+                }">
+                  <Check v-if="stepState(idx, currentIdx, booking.status) === 'done'" class="h-4 w-4" />
+                  <XCircle v-else-if="stepState(idx, currentIdx, booking.status) === 'rejected' || stepState(idx, currentIdx, booking.status) === 'cancelled'" class="h-4 w-4" />
+                  <component :is="step.icon" v-else class="h-4 w-4" />
+                </div>
+                <span class="text-[10px] text-zinc-500 mt-1 text-center leading-tight">{{ step.label }}</span>
               </div>
-              <span class="text-[10px] text-zinc-500 mt-1 text-center leading-tight">{{ step.label }}</span>
-            </div>
+              <div v-if="idx < STEPS.length - 1" class="flex-1 h-0.5 mx-1" :class="{
+                'bg-zinc-900': stepState(idx + 1, currentIdx, booking.status) === 'done',
+                'bg-zinc-200': stepState(idx + 1, currentIdx, booking.status) === 'upcoming' || stepState(idx + 1, currentIdx, booking.status) === 'current',
+                'bg-red-300': stepState(idx + 1, currentIdx, booking.status) === 'rejected' || stepState(idx + 1, currentIdx, booking.status) === 'cancelled',
+              }" />
+            </template>
           </div>
           <p class="text-xs text-zinc-500 text-center mt-4">{{ stepHint }}</p>
         </div>
@@ -245,15 +306,42 @@ onMounted(fetchBooking)
             <!-- Customer Info -->
             <div class="rounded-md border border-zinc-200 bg-white p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Customer</h2>
-              <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-full bg-zinc-200 flex items-center justify-center">
+              <div class="flex items-start gap-3 mb-4">
+                <div class="h-10 w-10 rounded-full bg-zinc-200 flex items-center justify-center flex-shrink-0">
                   <User class="h-5 w-5 text-zinc-500" />
                 </div>
                 <div>
                   <p class="text-sm font-medium text-zinc-900">{{ booking.customer_name }}</p>
                   <p class="text-xs text-zinc-500">{{ booking.customer_email }}</p>
+                  <p class="text-xs text-zinc-400">{{ booking.customer_phone || 'No phone' }}</p>
                 </div>
               </div>
+
+              <!-- Identity Documents -->
+              <div v-if="booking.customer_identity_docs && booking.customer_identity_docs.length > 0" class="space-y-4 pt-4 border-t border-zinc-100">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">Identity Documents</p>
+                <div v-for="doc in booking.customer_identity_docs" :key="doc.id" class="p-3 rounded-md bg-zinc-50 border border-zinc-100">
+                  <div class="flex items-center justify-between mb-2">
+                    <div>
+                      <p class="text-xs font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
+                      <p class="text-xs text-zinc-500">{{ doc.document_number }}</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <p class="text-[10px] text-zinc-400 mb-1">Front</p>
+                      <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
+                      <div v-else class="w-full h-24 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-zinc-400 mb-1">Back</p>
+                      <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
+                      <div v-else class="w-full h-24 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-xs text-zinc-400 pt-4 border-t border-zinc-100">No identity documents submitted.</div>
             </div>
 
             <!-- Booking Details -->
@@ -282,27 +370,21 @@ onMounted(fetchBooking)
                 </div>
                 <div>
                   <p class="text-xs text-zinc-400">Created</p>
-                  <p class="text-sm text-zinc-900">{{ formatDate(booking.created_at) }}</p>
+                  <p class="text-sm text-zinc-900">{{ formatDateTime(booking.created_at) }}</p>
                 </div>
                 <div>
                   <p class="text-xs text-zinc-400">Last Updated</p>
-                  <p class="text-sm text-zinc-900">{{ formatDate(booking.updated_at) }}</p>
+                  <p class="text-sm text-zinc-900">{{ formatDateTime(booking.updated_at) }}</p>
                 </div>
               </div>
 
               <!-- Vehicle info -->
-              <div class="flex items-center gap-4 p-4 rounded-md bg-zinc-50 border border-zinc-100 mb-6">
-                <div class="h-16 w-24 rounded bg-zinc-200 overflow-hidden flex-shrink-0">
-                  <div class="h-full w-full flex items-center justify-center">
-                    <Car class="h-6 w-6 text-zinc-400" />
-                  </div>
+              <div class="p-4 rounded-md bg-zinc-50 border border-zinc-100 mb-6">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Vehicle</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                  <img v-for="img in (booking.vehicle_images || [])" :key="img.id" :src="img.image" :alt="booking.vehicle_name" class="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = img.image" />
                 </div>
-                <div>
-                  <p class="text-sm font-medium text-zinc-900">{{ booking.vehicle_name }}</p>
-                  <RouterLink :to="`/vehicles/${booking.vehicle}`" class="text-xs text-zinc-500 hover:text-zinc-900">
-                    View Vehicle
-                  </RouterLink>
-                </div>
+                <p class="text-sm font-medium text-zinc-900">{{ booking.vehicle_name }}</p>
               </div>
 
               <!-- Dates -->
@@ -341,6 +423,10 @@ onMounted(fetchBooking)
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Cost Summary</h2>
               <div class="space-y-2">
                 <div class="flex justify-between text-sm">
+                  <span class="text-zinc-500">Daily Rate</span>
+                  <span class="text-zinc-900">₱{{ Number(booking.subtotal / booking.rental_days).toLocaleString('en-PH') }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Rental Days</span>
                   <span class="text-zinc-900">{{ booking.rental_days }} day{{ booking.rental_days > 1 ? 's' : '' }}</span>
                 </div>
@@ -375,39 +461,10 @@ onMounted(fetchBooking)
                   variant="ghost"
                   class="w-full text-red-600 hover:bg-red-50"
                   :disabled="processing"
-                  @click="showRejectDialog = true; rejectReason = ''"
+                  @click="openRejectModal"
                 >
                   Reject Booking
                 </Button>
-
-                <!-- Reject Dialog -->
-                <div v-if="showRejectDialog" class="space-y-3 pt-2 border-t border-zinc-100">
-                  <p class="text-sm font-medium text-red-800">Rejection Reason</p>
-                  <textarea
-                    v-model="rejectReason"
-                    rows="2"
-                    placeholder="Enter reason..."
-                    class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
-                  />
-                  <div class="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      class="flex-1"
-                      @click="showRejectDialog = false"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      class="flex-1 bg-red-600 hover:bg-red-700"
-                      :disabled="!rejectReason.trim() || processing"
-                      @click="rejectBooking"
-                    >
-                      {{ processing ? '...' : 'Confirm Reject' }}
-                    </Button>
-                  </div>
-                </div>
               </template>
 
               <!-- Awaiting Payment: Confirm Payment -->
@@ -469,5 +526,82 @@ onMounted(fetchBooking)
         </div>
       </template>
     </main>
+
+    <!-- Lightbox -->
+    <Teleport to="body">
+      <div v-if="lightboxImage" class="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" @click="lightboxImage = ''">
+        <button @click="lightboxImage = ''" class="absolute top-4 right-4 text-white/70 hover:text-white"><XCircle class="h-6 w-6" /></button>
+        <img :src="lightboxImage" class="max-w-[90vw] max-h-[85vh] object-contain" />
+      </div>
+    </Teleport>
+
+    <!-- Reject Modal -->
+    <Teleport to="body">
+      <div v-if="showRejectDialog" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeRejectModal" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+          <h3 class="text-lg font-semibold text-zinc-900">Reject Booking</h3>
+          <p class="text-sm text-zinc-500">Please provide a reason for rejecting this booking request.</p>
+
+          <!-- Reason dropdown -->
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-zinc-700">Reason</label>
+            <select
+              v-model="rejectReasonType"
+              class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              :disabled="processing"
+            >
+              <option v-for="reason in REJECT_REASONS" :key="reason.value" :value="reason.value">{{ reason.label }}</option>
+            </select>
+          </div>
+
+          <!-- Custom reason textarea -->
+          <div v-if="rejectReasonType === 'other'" class="space-y-1">
+            <label class="text-xs font-medium text-zinc-700">Please specify</label>
+            <textarea
+              v-model="rejectReasonCustom"
+              rows="2"
+              placeholder="Enter your reason..."
+              class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              :disabled="processing"
+            />
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="closeRejectModal" :disabled="processing">Cancel</Button>
+            <Button
+              class="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              :disabled="!canConfirmReject || processing"
+              @click="confirmRejectClick"
+            >
+              {{ processing ? '...' : 'Reject Booking' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Reject Confirmation Modal -->
+    <Teleport to="body">
+      <div v-if="showRejectConfirmModal" class="fixed inset-0 z-[250] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4 text-center">
+          <XCircle class="h-10 w-10 text-red-500 mx-auto" />
+          <h3 class="text-lg font-semibold text-zinc-900">Confirm Rejection</h3>
+          <p class="text-sm text-zinc-500">Are you sure you want to reject this booking?</p>
+          <p class="text-xs text-zinc-400 italic">"{{ rejectReasonText }}"</p>
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showRejectConfirmModal = false" :disabled="processing">Back</Button>
+            <Button
+              class="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              :disabled="processing"
+              @click="rejectBooking"
+            >
+              {{ processing ? 'Rejecting...' : 'Yes, Reject' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
