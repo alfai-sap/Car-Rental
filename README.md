@@ -63,3 +63,7 @@ python manage.py seed_vehicles
 ```bash
 python manage.py seed_vehicles --clear
 ```
+#Admin Credentials
+/admin/login
+Email	admin@carrental.com
+Password	Admin123!

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
 import { Fuel, Users, Gauge, Car, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-vue-next'
 import api from '@/services/api'
+
+const auth = useAuthStore()
 
 interface VehicleImage {
   id: number
@@ -31,6 +34,10 @@ const route = useRoute()
 const vehicle = ref<Vehicle | null>(null)
 const loading = ref(true)
 const error = ref('')
+
+// Existing booking for this vehicle
+const existingBooking = ref<{ id: number; status: string; status_display: string; booking_number: string } | null>(null)
+const checkingBooking = ref(false)
 
 // Image gallery
 const currentImageIndex = ref(0)
@@ -84,6 +91,29 @@ onMounted(async () => {
     const id = route.params.id
     const response = await api.get(`/vehicles/${id}/`)
     vehicle.value = response.data
+
+    // Check if user has an existing booking for this vehicle
+    if (auth.isAuthenticated) {
+      checkingBooking.value = true
+      try {
+        const bookingRes = await api.get('/bookings/', { params: { vehicle: id } })
+        const userBookings: Array<{ id: number; status: string; status_display: string; booking_number: string; vehicle: number }> = bookingRes.data
+        const active = userBookings.find(b =>
+          b.vehicle === Number(id) &&
+          ['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active'].includes(b.status)
+        )
+        if (active) {
+          const detail = await api.get(`/bookings/${active.id}/`)
+          existingBooking.value = {
+            id: detail.data.id,
+            status: detail.data.status,
+            status_display: detail.data.status_display,
+            booking_number: detail.data.booking_number,
+          }
+        }
+      } catch { /* ignore */ }
+      finally { checkingBooking.value = false }
+    }
   } catch {
     error.value = 'Vehicle not found.'
   } finally {
@@ -205,8 +235,26 @@ onMounted(async () => {
               <p class="text-2xl font-bold text-zinc-900">{{ formatPrice(vehicle.price_per_day) }}</p>
               <p class="text-xs text-zinc-500 mt-1">Free cancellation up to 24 hours before pickup</p>
             </div>
-            <Button class="w-full" disabled>Book Now (Coming Soon)</Button>
-            <p class="text-xs text-center text-zinc-400">Booking will be available in the next update.</p>
+
+            <!-- Existing booking -->
+            <template v-if="checkingBooking">
+              <Button class="w-full" disabled>Checking...</Button>
+            </template>
+            <template v-else-if="existingBooking">
+              <div class="rounded-md bg-zinc-50 border border-zinc-200 p-3 text-center">
+                <p class="text-xs text-zinc-500 mb-1">Your Booking Status</p>
+                <p class="text-sm font-semibold text-zinc-900">{{ existingBooking.status_display }}</p>
+                <p class="text-xs text-zinc-400 mt-1">{{ existingBooking.booking_number }}</p>
+              </div>
+              <RouterLink :to="`/transactions/${existingBooking.id}`">
+                <Button class="w-full" variant="ghost">View Transaction</Button>
+              </RouterLink>
+            </template>
+            <template v-else>
+              <RouterLink :to="`/vehicles/${vehicle.id}/book`">
+                <Button class="w-full">Book Now</Button>
+              </RouterLink>
+            </template>
           </div>
         </div>
       </template>

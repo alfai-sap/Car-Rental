@@ -35,6 +35,8 @@ onMounted(async () => {
           Car Rental
         </RouterLink>
 
+        <div class="flex-1" />
+
         <!-- Authenticated state -->
         <div v-if="auth.isAuthenticated && auth.user" class="relative">
           <button
@@ -59,19 +61,43 @@ onMounted(async () => {
               <p class="text-xs text-zinc-500 truncate">{{ auth.user.email }}</p>
             </div>
             <div class="p-1">
-              <RouterLink
-                to="/profile"
-                class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
-                @click="closeDropdown"
-              >
-                Profile
-              </RouterLink>
-              <button
-                @click="auth.logout(); closeDropdown()"
-                class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
-              >
-                Sign Out
-              </button>
+              <template v-if="auth.user?.is_staff">
+                <RouterLink
+                  to="/admin/dashboard"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Admin
+                </RouterLink>
+                <button
+                  @click="auth.logout(); closeDropdown()"
+                  class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                >
+                  Sign Out
+                </button>
+              </template>
+              <template v-else>
+                <RouterLink
+                  to="/dashboard"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Dashboard
+                </RouterLink>
+                <RouterLink
+                  to="/profile"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Profile
+                </RouterLink>
+                <button
+                  @click="auth.logout(); closeDropdown()"
+                  class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                >
+                  Sign Out
+                </button>
+              </template>
             </div>
           </div>
         </div>

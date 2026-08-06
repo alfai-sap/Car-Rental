@@ -439,9 +439,9 @@ Development phases include:
 2. Authentication
 3. Vehicle Management
 4. Booking System
-5. Payment Integration
-6. Customer Dashboard
-7. Administrator Dashboard
+5. Customer Dashboard
+6. Administrator Dashboard
+7. Payment Integration
 8. Reports
 9. Deployment
 10. Production Optimization

@@ -20,6 +20,12 @@ const router = createRouter({
       component: () => import('@/views/VehicleDetailView.vue'),
     },
     {
+      path: '/vehicles/:id/book',
+      name: 'vehicle-book',
+      component: () => import('@/views/BookingView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -53,6 +59,36 @@ const router = createRouter({
       component: () => import('@/views/ProfileView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/dashboard',
+      name: 'customer-dashboard',
+      component: () => import('@/views/CustomerDashboardView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/transactions/:id',
+      name: 'transaction',
+      component: () => import('@/views/TransactionView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/transactions/:id',
+      name: 'admin-transaction',
+      component: () => import('@/views/AdminTransactionView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/dashboard',
+      name: 'admin-dashboard',
+      component: () => import('@/views/AdminDashboardView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: () => import('@/views/AdminLoginView.vue'),
+      meta: { guestOnly: true },
+    },
   ],
 })
 
@@ -72,7 +108,20 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login' })
   } else if (to.meta.guestOnly && auth.isAuthenticated) {
-    next({ name: 'home' })
+    if (auth.user?.is_staff) {
+      next({ name: 'admin-dashboard' })
+    } else {
+      next({ name: 'home' })
+    }
+  } else if (auth.isAuthenticated && auth.user?.is_staff) {
+    // Staff users can only access admin pages and vehicle browsing
+    if (to.name === 'home') {
+      next({ name: 'admin-dashboard' })
+    } else if (to.name === 'vehicle-book' || to.name === 'customer-dashboard' || to.name === 'profile') {
+      next({ name: 'admin-dashboard' })
+    } else {
+      next()
+    }
   } else {
     next()
   }
