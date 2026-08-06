@@ -31,7 +31,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
 
 
 class VehicleDetailSerializer(serializers.ModelSerializer):
-    """Full serializer for detail view — includes all images."""
+    """Full serializer for detail view — includes all images (read only)."""
     images = VehicleImageSerializer(many=True, read_only=True)
 
     class Meta:
@@ -42,3 +42,13 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class VehicleWriteSerializer(serializers.ModelSerializer):
+    """Write-only serializer for create/update — excludes nested images."""
+    class Meta:
+        model = Vehicle
+        fields = [
+            'make', 'model', 'year', 'type', 'transmission', 'fuel',
+            'seats', 'price_per_day', 'status', 'description',
+        ]

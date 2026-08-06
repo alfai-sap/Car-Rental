@@ -6,6 +6,7 @@ from apps.vehicles.models import Vehicle, VehicleImage
 from apps.vehicles.serializers import (
     VehicleListSerializer,
     VehicleDetailSerializer,
+    VehicleWriteSerializer,
     VehicleImageSerializer,
 )
 
@@ -30,6 +31,8 @@ class VehicleViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return VehicleListSerializer
+        if self.action in ('create', 'update', 'partial_update'):
+            return VehicleWriteSerializer
         return VehicleDetailSerializer
 
     def get_queryset(self):

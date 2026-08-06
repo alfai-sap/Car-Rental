@@ -129,14 +129,6 @@ class VerifyEmailView(views.APIView):
         user.save()
         return Response({'detail': 'Email verified successfully. You can now sign in.'})
 
-        if user.is_verified:
-            return Response({'detail': 'Account is already verified.'})
-
-        user.is_verified = True
-        user.verified_at = timezone.now()
-        user.save()
-        return Response({'detail': 'Email verified successfully. You can now sign in.'})
-
 
 class ResendVerificationView(views.APIView):
     permission_classes = [AllowAny]
