@@ -103,11 +103,20 @@ class BookingAPITests(TestCase):
         self.assertEqual(response.data['status'], 'pending_approval')
         self.assertEqual(response.data['rental_days'], 4)  # inclusive: days 2,3,4,5 = 4
 
-    def test_create_booking_overlapping_fails(self):
+    def test_create_booking_overlapping_pending_request_is_allowed(self):
         self._login('cust@test.com', 'Pass123!')
-        self.client.post('/api/bookings/', self.valid_payload, format='json')
+        response = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Overlapping — move start 1 day forward into the booked range
+    def test_create_booking_overlapping_approved_booking_fails(self):
+        self._login('cust@test.com', 'Pass123!')
+        first_response = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        first_booking_id = first_response.data['id']
+
+        self._login('admin@test.com', 'AdminPass123!')
+        self.client.post(f'/api/bookings/{first_booking_id}/approve/')
+
+        self._login('cust@test.com', 'Pass123!')
         response = self.client.post('/api/bookings/', self.valid_payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -263,7 +272,24 @@ class AvailabilityTests(TestCase):
         self.assertEqual(response.data['rental_days'], 4)  # inclusive: 10,11,12,13
         self.assertEqual(response.data['subtotal'], '10000.00')  # 2500 * 4
 
-    def test_availability_overlapping_unavailable(self):
+    def test_availability_pending_booking_still_available(self):
+        Booking.objects.create(
+            customer=self.customer,
+            vehicle=self.vehicle,
+            pickup_date=date.today() + timedelta(days=5),
+            return_date=date.today() + timedelta(days=8),
+            pickup_time='09:00',
+            status='pending_approval',
+        )
+
+        start = str(date.today() + timedelta(days=6))
+        end = str(date.today() + timedelta(days=8))
+        response = self.client.get(
+            f'/api/bookings/availability/?vehicle_id={self.vehicle.pk}&start_date={start}&end_date={end}'
+        )
+        self.assertTrue(response.data['available'])
+
+    def test_availability_approved_booking_unavailable(self):
         self._create_booking(days_from_now=5, length=3)
 
         start = str(date.today() + timedelta(days=6))

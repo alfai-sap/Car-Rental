@@ -161,7 +161,7 @@ function formatDate(dateStr: string): string {
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(':')
-  const hour = parseInt(h)
+  const hour = parseInt(h || '0', 10)
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m} ${ampm}`
@@ -355,8 +355,7 @@ onMounted(async () => {
                   :key="tab.key"
                   @click="selectFilter(tab.key)"
                   class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-zinc-100 transition-colors"
-                  :class="[activeTab === tab.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600',
-                    tab.highlight && activeTab !== tab.key ? 'text-amber-600' : '']"
+                  :class="[activeTab === tab.key ? 'text-zinc-900 font-medium bg-zinc-50' : 'text-zinc-600']"
                 >
                   {{ tab.label }}
                   <span v-if="tab.key !== 'all' && summary" class="text-xs text-zinc-400 ml-1">({{ (summary as Record<string, number>)[tab.key] || 0 }})</span>

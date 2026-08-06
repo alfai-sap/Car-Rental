@@ -120,7 +120,7 @@ function formatDateTime(dateStr: string): string {
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(':')
-  const hour = parseInt(h)
+  const hour = parseInt(h || '0', 10)
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m} ${ampm}`
@@ -424,7 +424,7 @@ onMounted(fetchBooking)
               <div class="space-y-2">
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Daily Rate</span>
-                  <span class="text-zinc-900">₱{{ Number(booking.subtotal / booking.rental_days).toLocaleString('en-PH') }}</span>
+                  <span class="text-zinc-900">₱{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Rental Days</span>

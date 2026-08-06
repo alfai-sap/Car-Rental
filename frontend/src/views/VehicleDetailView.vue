@@ -285,7 +285,7 @@ onMounted(async () => {
         </button>
         <img
           v-if="vehicle?.images[currentImageIndex]"
-          :src="vehicle.images[currentImageIndex].image"
+          :src="vehicle.images[currentImageIndex]?.image"
           :style="{ transform: `scale(${lightboxZoom})`, transition: 'transform 0.2s' }"
           class="max-w-[90vw] max-h-[85vh] object-contain cursor-zoom-in"
           @click="zoomIn"

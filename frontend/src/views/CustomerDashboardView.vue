@@ -156,7 +156,7 @@ function formatDate(dateStr: string): string {
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(':')
-  const hour = parseInt(h)
+  const hour = parseInt(h || '0', 10)
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m} ${ampm}`

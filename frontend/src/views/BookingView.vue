@@ -131,7 +131,7 @@ const calendarWeeks = computed(() => {
       const isPast = day.getTime() < today.value.getTime()
       const isStart = ds === startStr.value
       const isEnd = ds === endStr.value
-      const inRange = startStr.value && endStr.value && ds > startStr.value && ds < endStr.value
+      const inRange = Boolean(startStr.value && endStr.value && ds > startStr.value && ds < endStr.value)
 
       week.push({ dateStr: ds, isCurrentMonth, isPast, isStart, isEnd, inRange })
     }
@@ -386,8 +386,8 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                     :class="[
                       !day.isCurrentMonth ? 'text-zinc-200 cursor-default' : '',
                       day.isPast ? 'text-zinc-300 cursor-default' : '',
-                      !day.isPast && day.isCurrentMonth && !day.isStart && !day.isEnd && !day.isInRange ? 'hover:bg-zinc-100 cursor-pointer text-zinc-700' : '',
-                      day.isInRange ? 'border-t border-b border-zinc-300 bg-zinc-50 text-zinc-700' : '',
+                      !day.isPast && day.isCurrentMonth && !day.isStart && !day.isEnd && !day.inRange ? 'hover:bg-zinc-100 cursor-pointer text-zinc-700' : '',
+                      day.inRange ? 'border-t border-b border-zinc-300 bg-zinc-50 text-zinc-700' : '',
                       day.isStart && day.isEnd
                         ? 'rounded-md bg-zinc-900 text-white font-medium'
                         : '',

@@ -58,6 +58,7 @@ const loading = ref(true)
 const error = ref('')
 const cancelling = ref(false)
 const paying = ref(false)
+const paymentNotice = ref('')
 const lightboxImage = ref('')
 
 // ── Cancel modal state ──
@@ -156,7 +157,7 @@ function formatDateTime(dateStr: string): string {
 
 function formatTime(timeStr: string): string {
   const [h, m] = timeStr.split(':')
-  const hour = parseInt(h)
+  const hour = parseInt(h || '0', 10)
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const display = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour
   return `${display}:${m} ${ampm}`
@@ -165,10 +166,14 @@ function formatTime(timeStr: string): string {
 async function initiatePayment() {
   if (!booking.value) return
   paying.value = true
+  paymentNotice.value = ''
   try {
     const response = await api.post('/payments/create-session/', { booking_id: booking.value.id })
     if (response.data.checkout_url) window.location.href = response.data.checkout_url
-  } catch { /* ignore */ }
+    else paymentNotice.value = response.data.detail || 'Payment setup is not configured yet. Please contact support.'
+  } catch (error: any) {
+    paymentNotice.value = error?.response?.data?.detail || 'Unable to start payment right now. Please try again later.'
+  }
   finally { paying.value = false }
 }
 
@@ -189,7 +194,7 @@ const canCancel = computed(() => {
   if (!booking.value) return false
   return ['pending_approval', 'approved', 'awaiting_payment'].includes(booking.value.status)
 })
-const canPay = computed(() => booking.value?.status === 'awaiting_payment')
+const canPay = computed(() => ['approved', 'awaiting_payment'].includes(booking.value?.status || ''))
 const stepHint = computed(() => {
   if (!booking.value) return ''
   switch (booking.value.status) {
@@ -289,7 +294,7 @@ onMounted(fetchBooking)
             <div class="rounded-md border border-zinc-200 bg-white p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Cost Summary</h2>
               <div class="space-y-2">
-                <div class="flex justify-between text-sm"><span class="text-zinc-500">Daily Rate</span><span class="text-zinc-900">₱{{ Number(booking.subtotal / booking.rental_days).toLocaleString('en-PH') }}</span></div>
+                <div class="flex justify-between text-sm"><span class="text-zinc-500">Daily Rate</span><span class="text-zinc-900">₱{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span></div>
                 <div class="flex justify-between text-sm"><span class="text-zinc-500">Rental Days</span><span class="text-zinc-900">{{ booking.rental_days }} day{{ booking.rental_days > 1 ? 's' : '' }}</span></div>
                 <div class="flex justify-between text-sm"><span class="text-zinc-500">Subtotal</span><span class="text-zinc-900">₱{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span></div>
                 <hr class="border-zinc-200" />
@@ -311,6 +316,9 @@ onMounted(fetchBooking)
                 </p>
               </div>
               <Button v-if="canPay" class="w-full" :disabled="paying" @click="initiatePayment">{{ paying ? 'Redirecting...' : 'Pay Now' }}</Button>
+              <p v-if="paymentNotice" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                {{ paymentNotice }}
+              </p>
               <Button v-if="canCancel" variant="ghost" class="w-full text-red-600 hover:bg-red-50" :disabled="cancelling" @click="openCancelModal">{{ cancelling ? 'Cancelling...' : 'Cancel Request' }}</Button>
               <div v-if="booking.status === 'completed'" class="text-center"><CheckCircle class="h-8 w-8 text-green-500 mx-auto mb-2" /><p class="text-xs text-green-700 font-medium">Rental Complete</p></div>
             </div>

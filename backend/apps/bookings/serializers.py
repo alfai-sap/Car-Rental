@@ -71,22 +71,17 @@ class BookingSerializer(serializers.ModelSerializer):
                 if pickup_date < timezone.now().date():
                     raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
 
-                # Prevent same user from having multiple active requests for the same vehicle.
-                # Different users can submit overlapping booking requests (they are not yet approved).
-                request = self.context.get('request')
-                user = request.user if request and request.user.is_authenticated else None
                 vehicle = data.get('vehicle')
-                if user and vehicle:
-                    own_existing = Booking.objects.filter(
+                if vehicle:
+                    overlapping = Booking.objects.filter(
                         vehicle=vehicle,
-                        customer=user,
-                        status__in=['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active'],
+                        status__in=['approved', 'awaiting_payment', 'confirmed', 'active'],
+                        pickup_date__lt=return_date,
+                        return_date__gt=pickup_date,
                     )
-                    if self.instance:
-                        own_existing = own_existing.exclude(pk=self.instance.pk)
-                    if own_existing.exists():
+                    if overlapping.exists():
                         raise serializers.ValidationError({
-                            'vehicle': 'You already have a booking request for this vehicle. You can edit your existing booking instead.'
+                            'vehicle': 'This vehicle is already booked for the selected dates.'
                         })
 
         return data

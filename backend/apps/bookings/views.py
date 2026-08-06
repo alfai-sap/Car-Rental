@@ -153,19 +153,16 @@ class AvailabilityView(viewsets.ViewSet):
         if vehicle.status not in ['available', 'rented']:
             return Response({'available': False, 'reason': 'Vehicle is not available for booking.'})
 
-        # Check for overlapping bookings by the SAME user only.
-        # Different users can have overlapping booking requests since they
-        # are not yet approved (not guaranteed to be booked).
+        # Only approved or later bookings reserve the vehicle for a date range.
         overlapping = Booking.objects.filter(
             vehicle_id=vehicle_id,
-            customer=request.user,
-            status__in=['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active'],
+            status__in=['approved', 'awaiting_payment', 'confirmed', 'active'],
             pickup_date__lt=end,
             return_date__gt=start,
         ).exists()
 
         if overlapping:
-            return Response({'available': False, 'reason': 'You already have a booking request covering these dates.'})
+            return Response({'available': False, 'reason': 'This vehicle is already booked for the selected dates.'})
 
         # Calculate pricing — inclusive (Aug 1–2 = 2 days)
         rental_days = max(1, (end - start).days + 1)
