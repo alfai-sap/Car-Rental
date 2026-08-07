@@ -1,6 +1,10 @@
 from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking
+from apps.vehicles.models import VehicleUnit
+
+# Statuses that occupy a VehicleUnit
+UNIT_OCCUPYING_STATUSES = ['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active']
 
 
 class BookingSerializer(serializers.ModelSerializer):
@@ -11,21 +15,23 @@ class BookingSerializer(serializers.ModelSerializer):
     vehicle_name = serializers.SerializerMethodField(read_only=True)
     vehicle_images = serializers.SerializerMethodField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    identity_snapshot = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Booking
         fields = [
             'id', 'booking_number', 'customer', 'customer_email', 'customer_name',
-            'customer_phone', 'customer_identity_docs',
-            'vehicle', 'vehicle_name', 'vehicle_images',
+            'customer_phone', 'customer_identity_docs', 'identity_snapshot',
+            'vehicle', 'vehicle_name', 'vehicle_images', 'vehicle_unit',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
-            'special_request', 'rejection_reason', 'handover_time',
-            'created_at', 'updated_at',
+            'special_request', 'rejection_reason', 'cancellation_reason',
+            'handover_time', 'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'booking_number', 'customer', 'rental_days', 'subtotal',
-            'estimated_total', 'status', 'rejection_reason', 'created_at', 'updated_at',
+            'id', 'booking_number', 'customer', 'vehicle_unit', 'rental_days',
+            'subtotal', 'estimated_total', 'status', 'rejection_reason',
+            'cancellation_reason', 'created_at', 'updated_at', 'handover_time',
         ]
 
     def get_customer_name(self, obj):
@@ -46,6 +52,10 @@ class BookingSerializer(serializers.ModelSerializer):
             result.append(item)
         return result
 
+    def get_identity_snapshot(self, obj):
+        """Return the immutable identity snapshot captured at booking time."""
+        return obj.identity_snapshot
+
     def get_vehicle_name(self, obj):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
 
@@ -61,29 +71,62 @@ class BookingSerializer(serializers.ModelSerializer):
         return images
 
     def validate(self, data):
-        if self.instance is None:  # create only
-            pickup_date = data.get('pickup_date')
-            return_date = data.get('return_date')
+        if self.instance is not None:
+            return data  # updates go through without re-validating dates/identity
 
-            if pickup_date and return_date:
-                if return_date < pickup_date:
-                    raise serializers.ValidationError({'return_date': 'Return date must be after pickup date.'})
+        customer = self.context['request'].user
+        pickup_date = data.get('pickup_date')
+        return_date = data.get('return_date')
+        vehicle = data.get('vehicle')
 
-                if pickup_date < timezone.now().date():
-                    raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
+        # ── Driver license check ──
+        if not customer.identity_documents.filter(document_type='drivers_license').exists():
+            raise serializers.ValidationError({
+                'identity': 'You must upload a driver\'s license before booking. Go to your profile to add it.',
+            })
 
-                vehicle = data.get('vehicle')
-                if vehicle:
-                    overlapping = Booking.objects.filter(
-                        vehicle=vehicle,
-                        status__in=['approved', 'awaiting_payment', 'confirmed', 'active'],
-                        pickup_date__lt=return_date,
-                        return_date__gt=pickup_date,
-                    )
-                    if overlapping.exists():
-                        raise serializers.ValidationError({
-                            'vehicle': 'This vehicle is already booked for the selected dates.'
-                        })
+        if not customer.is_verified:
+            raise serializers.ValidationError({
+                'verified': 'Please verify your email address before booking.',
+            })
+
+        if pickup_date and return_date:
+            if return_date < pickup_date:
+                raise serializers.ValidationError({'return_date': 'Return date must be after pickup date.'})
+            if pickup_date < timezone.now().date():
+                raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
+
+        if vehicle:
+            # VehicleUnit-level availability: at least one unit must be free
+            total = VehicleUnit.objects.filter(vehicle=vehicle).count()
+            if total == 0:
+                raise serializers.ValidationError({
+                    'vehicle': 'No units available for this vehicle. Please contact the administrator.',
+                })
+
+            booked_unit_ids = Booking.objects.filter(
+                vehicle=vehicle,
+                vehicle_unit__isnull=False,
+                status__in=UNIT_OCCUPYING_STATUSES,
+                pickup_date__lt=return_date,
+                return_date__gt=pickup_date,
+            ).values_list('vehicle_unit_id', flat=True)
+
+            unavailable_ids = VehicleUnit.objects.filter(
+                vehicle=vehicle, status__in=['maintenance', 'inactive'],
+            ).values_list('id', flat=True)
+
+            if unavailable_ids:
+                booked_unit_ids = set(booked_unit_ids) | set(unavailable_ids)
+
+            available_count = total - VehicleUnit.objects.filter(
+                vehicle=vehicle, id__in=booked_unit_ids,
+            ).count()
+
+            if available_count <= 0:
+                raise serializers.ValidationError({
+                    'vehicle': 'No units available for the selected dates.',
+                })
 
         return data
 
@@ -110,7 +153,8 @@ class DashboardBookingSerializer(serializers.ModelSerializer):
             'id', 'booking_number', 'vehicle', 'vehicle_name', 'vehicle_image',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
-            'special_request', 'rejection_reason', 'created_at', 'updated_at',
+            'special_request', 'rejection_reason', 'cancellation_reason',
+            'created_at', 'updated_at',
         ]
 
     def get_vehicle_name(self, obj):
@@ -118,13 +162,13 @@ class DashboardBookingSerializer(serializers.ModelSerializer):
 
     def get_vehicle_image(self, obj):
         primary = obj.vehicle.images.filter(is_primary=True).first()
-        if primary and hasattr(primary, 'url'):
+        if primary and primary.image:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(primary.image.url)
             return primary.image.url
         first = obj.vehicle.images.first()
-        if first and hasattr(first, 'url'):
+        if first and first.image:
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(first.image.url)

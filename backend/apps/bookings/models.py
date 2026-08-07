@@ -45,7 +45,10 @@ class Booking(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
     special_request = models.TextField(blank=True)
     rejection_reason = models.TextField(blank=True)
+    cancellation_reason = models.TextField(blank=True)
     handover_time = models.DateTimeField(null=True, blank=True)
+    # Identity snapshot — immutable record of customer identity at booking time
+    identity_snapshot = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

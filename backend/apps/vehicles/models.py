@@ -2,6 +2,14 @@ from django.db import models
 
 
 class Vehicle(models.Model):
+    """Represents a vehicle model listing displayed to customers.
+
+    Availability is determined per VehicleUnit — this model stores shared
+    listing info (make, model, price, images) while VehicleUnit tracks
+    per-unit status (available, reserved, booked, active_rental, etc.).
+    The 'status' field here is deprecated and only retained for seed data
+    compatibility. Always use VehicleUnit to determine real availability.
+    """
     TRANSMISSION_CHOICES = [
         ('automatic', 'Automatic'),
         ('manual', 'Manual'),

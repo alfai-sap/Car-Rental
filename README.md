@@ -63,6 +63,24 @@ python manage.py seed_vehicles
 ```bash
 python manage.py seed_vehicles --clear
 ```
+
+# 1. Drop and recreate the database
+psql -U postgres -c "DROP DATABASE IF EXISTS car_rental;"
+psql -U postgres -c "CREATE DATABASE car_rental;"
+
+# 2. Re-run all migrations
+python manage.py migrate
+
+# 3. Seed 18 vehicles with generated images
+python manage.py seed_vehicles
+
+# Data-only refresh (keep schema, clear data)
+python manage.py shell -c "from apps.bookings.models import Booking; from apps.payments.models import Payment; Payment.objects.all().delete(); Booking.objects.all().delete()"
+python manage.py seed_vehicles --clear
+
+# 4. Create admin superuser (if not using the default from README)
+python manage.py createsuperuser
+
 #Admin Credentials
 /admin/login
 Email	admin@carrental.com

@@ -61,6 +61,7 @@ class VehicleUnitViewSet(viewsets.ModelViewSet):
     serializer_class = VehicleUnitSerializer
     permission_classes = [IsAdminOrReadOnly]
     lookup_field = 'pk'
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return VehicleUnit.objects.select_related('vehicle').filter(

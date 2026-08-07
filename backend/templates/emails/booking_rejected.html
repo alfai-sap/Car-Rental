@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f4f4f5; padding: 24px;">
+<div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 8px; padding: 32px;">
+  <h2 style="margin: 0 0 16px; font-size: 18px; color: #dc2626;">Booking Declined</h2>
+  <p style="color: #52525b; line-height: 1.6;">Hi {{ first_name }},</p>
+  <p style="color: #52525b; line-height: 1.6;">Your booking <strong>{{ booking_number }}</strong> for <strong>{{ vehicle_name }}</strong> was not approved.</p>
+  {% if rejection_reason %}<p style="color: #52525b; line-height: 1.6;"><strong>Reason:</strong> {{ rejection_reason }}</p>{% endif %}
+  <p style="color: #52525b; line-height: 1.6;">You can browse other vehicles or try different dates.</p>
+  <p style="color: #a1a1aa; font-size: 13px; margin-top: 24px;">– Car Rental Team</p>
+</div>
+</body>
+</html>

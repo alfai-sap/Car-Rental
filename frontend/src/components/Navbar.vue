@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { User } from 'lucide-vue-next'
+import { User, Bell } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 
 const auth = useAuthStore()
@@ -97,6 +97,13 @@ onMounted(async () => {
                   @click="closeDropdown"
                 >
                   Dashboard
+                </RouterLink>
+                <RouterLink
+                  to="/notifications"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Notifications
                 </RouterLink>
                 <RouterLink
                   to="/profile"

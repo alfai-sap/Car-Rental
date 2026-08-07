@@ -1,11 +1,38 @@
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from rest_framework import serializers
 from apps.accounts.models import User, IdentityDocument
 
-account_token_generator = PasswordResetTokenGenerator()
+
+class AccountTokenGenerator:
+    """Stateless token generator for email verification and password reset.
+
+    Uses Django's TimestampSigner instead of PasswordResetTokenGenerator
+    to avoid tokens becoming invalid when the user changes their password.
+    Tokens expire after the configured PASSWORD_RESET_TIMEOUT (default 5 min).
+    """
+    def __init__(self):
+        self.signer = TimestampSigner()
+
+    def make_token(self, user):
+        return self.signer.sign(str(user.pk))
+
+    def check_token(self, user, token):
+        try:
+            signed_pk = self.signer.unsign(token, max_age=_get_token_timeout())
+            return signed_pk == str(user.pk)
+        except (SignatureExpired, BadSignature):
+            return False
+
+
+def _get_token_timeout():
+    from django.conf import settings
+    return getattr(settings, 'PASSWORD_RESET_TIMEOUT', 300)
+
+
+account_token_generator = AccountTokenGenerator()
 
 
 class RegisterSerializer(serializers.ModelSerializer):

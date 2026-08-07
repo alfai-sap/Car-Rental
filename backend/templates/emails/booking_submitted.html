@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f4f4f5; padding: 24px;">
+<div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 8px; padding: 32px;">
+  <h2 style="margin: 0 0 16px; font-size: 18px; color: #18181b;">Booking Request Received</h2>
+  <p style="color: #52525b; line-height: 1.6;">Hi {{ first_name }},</p>
+  <p style="color: #52525b; line-height: 1.6;">Your booking request <strong>{{ booking_number }}</strong> has been received and is pending review.</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+    <tr><td style="padding: 8px 0; color: #a1a1aa;">Vehicle</td><td style="color: #18181b;">{{ vehicle_name }}</td></tr>
+    <tr><td style="padding: 8px 0; color: #a1a1aa;">Dates</td><td style="color: #18181b;">{{ pickup_date }} – {{ return_date }}</td></tr>
+    <tr><td style="padding: 8px 0; color: #a1a1aa;">Total</td><td style="color: #18181b;">₱{{ estimated_total }}</td></tr>
+  </table>
+  <p style="color: #52525b; line-height: 1.6;">We'll notify you once the owner reviews your request.</p>
+  <p style="color: #a1a1aa; font-size: 13px; margin-top: 24px;">– Car Rental Team</p>
+</div>
+</body>
+</html>

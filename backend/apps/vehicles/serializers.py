@@ -41,11 +41,15 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
             'seats', 'price_per_day', 'status', 'description', 'images',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'images']
 
 
 class VehicleWriteSerializer(serializers.ModelSerializer):
     """Write-only serializer for create/update with image upload support."""
+
+    make = serializers.CharField(required=False, allow_blank=True)
+    model = serializers.CharField(required=False, allow_blank=True)
+    type = serializers.CharField(required=False, allow_blank=True)
     uploaded_images = serializers.ListField(
         child=serializers.ImageField(),
         write_only=True,
@@ -58,6 +62,12 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
             'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'description', 'uploaded_images',
         ]
+        extra_kwargs = {
+            'transmission': {'required': False},
+            'fuel': {'required': False},
+            'price_per_day': {'required': False},
+            'description': {'required': False},
+        }
 
     def create(self, validated_data):
         images = validated_data.pop('uploaded_images', [])
@@ -65,6 +75,13 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
         for img in images:
             VehicleImage.objects.create(vehicle=vehicle, image=img)
         return vehicle
+
+    def update(self, instance, validated_data):
+        validated_data.pop('uploaded_images', [])
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 class VehicleUnitSerializer(serializers.ModelSerializer):
@@ -76,7 +93,15 @@ class VehicleUnitSerializer(serializers.ModelSerializer):
             'id', 'vehicle', 'vehicle_name', 'plate_number', 'status',
             'mileage', 'notes', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'vehicle', 'created_at', 'updated_at', 'vehicle_name']
 
     def get_vehicle_name(self, obj):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
+
+    def validate_plate_number(self, value):
+        qs = VehicleUnit.objects.filter(plate_number=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('A unit with this plate number already exists.')
+        return value

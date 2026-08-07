@@ -28,7 +28,10 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 # ── Identity lock constants ──
-ACTIVE_BOOKING_STATUSES = ['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active']
+ACTIVE_BOOKING_STATUSES = [
+    'pending_approval', 'approved', 'awaiting_payment',
+    'confirmed', 'waiting_for_pickup', 'active',
+]
 LOCKED_MESSAGE = 'Identity information cannot be modified while you have an active booking.'
 
 
@@ -280,3 +283,58 @@ class LogoutView(views.APIView):
         except Exception:
             pass
         return Response({'detail': 'Logged out successfully.'})
+
+
+class NotificationsView(views.APIView):
+    """Return the customer's recent booking activity as a notification feed."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.bookings.models import Booking
+
+        bookings = Booking.objects.filter(
+            customer=request.user,
+        ).select_related('vehicle').order_by('-updated_at')[:50]
+
+        notifications = []
+        for b in bookings:
+            item = {
+                'id': b.id,
+                'booking_number': b.booking_number,
+                'vehicle_name': f"{b.vehicle.year} {b.vehicle.make} {b.vehicle.model}",
+                'status': b.status,
+                'status_display': b.get_status_display(),
+                'message': _notification_message(b),
+                'timestamp': b.updated_at,
+                'pickup_date': b.pickup_date,
+                'return_date': b.return_date,
+            }
+            notifications.append(item)
+
+        return Response({
+            'count': len(notifications),
+            'notifications': notifications,
+        })
+
+
+def _notification_message(booking):
+    status = booking.status
+    vehicle = f"{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}"
+    if status == 'pending_approval':
+        return f"Your booking for {vehicle} is pending owner approval."
+    elif status == 'awaiting_payment':
+        return f"Your booking for {vehicle} has been approved. Please complete payment."
+    elif status == 'confirmed':
+        return f"Payment confirmed! Your {vehicle} booking is finalized."
+    elif status == 'waiting_for_pickup':
+        return f"Your {vehicle} is ready — awaiting pickup on {booking.pickup_date}."
+    elif status == 'active':
+        return f"Your rental of {vehicle} is now active."
+    elif status == 'completed':
+        return f"Your rental of {vehicle} has been completed."
+    elif status == 'cancelled':
+        return f"Your booking for {vehicle} has been cancelled."
+    elif status == 'rejected':
+        reason = f": {booking.rejection_reason}" if booking.rejection_reason else ""
+        return f"Your booking for {vehicle} was not approved{reason}."
+    return f"Booking {booking.booking_number} status: {booking.get_status_display()}."

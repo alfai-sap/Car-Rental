@@ -40,11 +40,15 @@ class PaymentCreateSessionView(APIView):
 
 		if booking.status not in ['approved', 'awaiting_payment']:
 			return Response(
-				{'detail': 'Booking must be approved before payment can be created.'},
+				{'detail': 'Booking must be awaiting payment before checkout can be created.'},
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 
 		with transaction.atomic():
+			# Transition from approved → awaiting_payment if needed
+			if booking.status == 'approved':
+				booking.status = 'awaiting_payment'
+				booking.save()
 			invoice, _ = Invoice.objects.get_or_create(
 				booking=booking,
 				defaults={
@@ -136,13 +140,18 @@ class PaymentHistoryView(APIView):
 
 
 class PaymentWebhookView(APIView):
-	permission_classes = [AllowAny]
+    permission_classes = [AllowAny]
 
-	def post(self, request):
-		if not payment_gateway_enabled():
-			return Response(
-				{'detail': 'Payment gateway is not configured yet.'},
-				status=status.HTTP_503_SERVICE_UNAVAILABLE,
-			)
+    def post(self, request):
+        if not payment_gateway_enabled():
+            return Response(
+                {'detail': 'Payment gateway is not configured yet.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-		return Response({'detail': 'Webhook endpoint is ready.'}, status=status.HTTP_200_OK)
+        # TODO(Phase 7): Verify PayMongo webhook signature using PAYMONGO_WEBHOOK_SECRET
+        # before processing the payment status update. See PayMongo webhook docs.
+        return Response(
+            {'detail': 'Webhook endpoint ready. Signature verification will be implemented in Payment Phase.'},
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )

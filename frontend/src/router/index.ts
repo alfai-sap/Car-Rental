@@ -95,6 +95,18 @@ const router = createRouter({
       component: () => import('@/views/AdminVehiclesView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin/vehicles/:id',
+      name: 'admin-vehicle-detail',
+      component: () => import('@/views/AdminVehicleDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('@/views/NotificationsView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

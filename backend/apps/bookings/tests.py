@@ -1,12 +1,39 @@
 from datetime import date, timedelta
-from django.test import TestCase
+
 from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
+from django.core import mail
+from django.test import TestCase
 from rest_framework import status
+from rest_framework.test import APIClient
+
 from apps.bookings.models import Booking
-from apps.vehicles.models import Vehicle
+from apps.accounts.models import IdentityDocument
+from apps.vehicles.models import Vehicle, VehicleUnit
 
 User = get_user_model()
+
+
+def _create_verified_customer(email='cust@test.com', password='Pass123!'):
+    """Helper: create a verified customer with a driver's license."""
+    user = User.objects.create_user(
+        email=email, username=email.split('@')[0],
+        first_name='Test', last_name='Customer',
+        password=password, is_verified=True,
+    )
+    return user
+
+
+def _add_drivers_license(user):
+    IdentityDocument.objects.create(
+        user=user, document_type='drivers_license',
+        document_number='D01-12-345678',
+    )
+
+
+def _add_vehicle_unit(vehicle, plate='XXX-000', status='available'):
+    return VehicleUnit.objects.create(
+        vehicle=vehicle, plate_number=plate, status=status,
+    )
 
 
 class BookingModelTests(TestCase):
@@ -36,7 +63,7 @@ class BookingModelTests(TestCase):
             return_date=date.today() + timedelta(days=4),
             pickup_time='09:00',
         )
-        self.assertEqual(booking.rental_days, 4)  # inclusive: 1,2,3,4 = 4 days
+        self.assertEqual(booking.rental_days, 4)
 
     def test_subtotal_auto_calculated(self):
         booking = Booking.objects.create(
@@ -45,7 +72,7 @@ class BookingModelTests(TestCase):
             return_date=date.today() + timedelta(days=3),
             pickup_time='09:00',
         )
-        self.assertEqual(booking.subtotal, 7500.00)  # 2500 * 3 days
+        self.assertEqual(booking.subtotal, 7500.00)
 
     def test_default_status_is_pending_approval(self):
         booking = Booking.objects.create(
@@ -56,13 +83,23 @@ class BookingModelTests(TestCase):
         )
         self.assertEqual(booking.status, 'pending_approval')
 
+    def test_identity_snapshot_captured(self):
+        _add_drivers_license(self.user)
+        booking = Booking.objects.create(
+            customer=self.user, vehicle=self.vehicle,
+            pickup_date=date.today() + timedelta(days=1),
+            return_date=date.today() + timedelta(days=3),
+            pickup_time='09:00',
+            identity_snapshot={'test': True},
+        )
+        self.assertEqual(booking.identity_snapshot, {'test': True})
+
 
 class BookingAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.customer = User.objects.create_user(
-            email='cust@test.com', username='cust', password='Pass123!',
-        )
+        self.customer = _create_verified_customer()
+        _add_drivers_license(self.customer)
         self.admin = User.objects.create_superuser(
             email='admin@test.com', username='admin', password='AdminPass123!',
         )
@@ -70,19 +107,20 @@ class BookingAPITests(TestCase):
             make='Toyota', model='Vios', year=2024, type='Sedan',
             price_per_day=2500.00,
         )
+        _add_vehicle_unit(self.vehicle, 'ABC-1234')
         self.vehicle2 = Vehicle.objects.create(
             make='Honda', model='Civic', year=2024, type='Sedan',
             price_per_day=3000.00,
         )
+        _add_vehicle_unit(self.vehicle2, 'XYZ-5678')
 
         self.valid_payload = {
-            'vehicle': None,  # set in each test
+            'vehicle': self.vehicle.pk,
             'pickup_date': str(date.today() + timedelta(days=2)),
             'return_date': str(date.today() + timedelta(days=5)),
             'pickup_time': '09:00',
             'special_request': 'Please clean thoroughly.',
         }
-        self.valid_payload['vehicle'] = self.vehicle.pk
 
     def _login(self, email, password):
         resp = self.client.post('/api/auth/login/', {
@@ -101,7 +139,29 @@ class BookingAPITests(TestCase):
         response = self.client.post('/api/bookings/', self.valid_payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['status'], 'pending_approval')
-        self.assertEqual(response.data['rental_days'], 4)  # inclusive: days 2,3,4,5 = 4
+        self.assertEqual(response.data['rental_days'], 4)
+        # Verify identity snapshot was captured
+        self.assertIn('customer_email', response.data['identity_snapshot'])
+        # Verify email was sent
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_create_booking_no_drivers_license_fails(self):
+        cust2 = _create_verified_customer('nolicense@test.com')
+        self._login('nolicense@test.com', 'Pass123!')
+        response = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('identity', response.data)
+
+    def test_create_booking_unverified_email_fails(self):
+        cust2 = User.objects.create_user(
+            email='unverified@test.com', username='unverified',
+            password='Pass123!', is_verified=False,
+        )
+        _add_drivers_license(cust2)
+        self._login('unverified@test.com', 'Pass123!')
+        response = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('verified', response.data)
 
     def test_create_booking_overlapping_pending_request_is_allowed(self):
         self._login('cust@test.com', 'Pass123!')
@@ -109,22 +169,31 @@ class BookingAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_create_booking_overlapping_approved_booking_fails(self):
-        self._login('cust@test.com', 'Pass123!')
-        first_response = self.client.post('/api/bookings/', self.valid_payload, format='json')
-        first_booking_id = first_response.data['id']
+        # Create vehicle with only 1 unit
+        v = Vehicle.objects.create(make='Mazda', model='3', year=2024, type='Sedan', price_per_day=2000.00)
+        _add_vehicle_unit(v, 'MZD-001')
+        cust2 = _create_verified_customer('mazda@test.com')
+        _add_drivers_license(cust2)
 
+        payload = {**self.valid_payload, 'vehicle': v.pk}
+
+        self._login('mazda@test.com', 'Pass123!')
+        first = self.client.post('/api/bookings/', payload, format='json')
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+
+        # Admin approves → reserves the only unit
         self._login('admin@test.com', 'AdminPass123!')
-        self.client.post(f'/api/bookings/{first_booking_id}/approve/')
+        self.client.post(f'/api/bookings/{first.data["id"]}/approve/')
 
-        self._login('cust@test.com', 'Pass123!')
-        response = self.client.post('/api/bookings/', self.valid_payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Second booking should fail — no units left
+        self._login('mazda@test.com', 'Pass123!')
+        resp = self.client.post('/api/bookings/', payload, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_booking_different_vehicle_ok(self):
         self._login('cust@test.com', 'Pass123!')
         self.client.post('/api/bookings/', self.valid_payload, format='json')
 
-        # Same dates, different vehicle
         payload2 = {**self.valid_payload, 'vehicle': self.vehicle2.pk}
         response = self.client.post('/api/bookings/', payload2, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -171,7 +240,8 @@ class BookingAPITests(TestCase):
         self._login('cust@test.com', 'Pass123!')
         self.client.post('/api/bookings/', self.valid_payload, format='json')
 
-        other = User.objects.create_user(email='other@test.com', username='other', password='Pass123!')
+        other = _create_verified_customer('other@test.com')
+        _add_drivers_license(other)
         self._login('other@test.com', 'Pass123!')
         response = self.client.get('/api/bookings/')
         self.assertEqual(len(response.data['results']), 0)
@@ -197,7 +267,8 @@ class BookingAPITests(TestCase):
         self._login('admin@test.com', 'AdminPass123!')
         response = self.client.post(f'/api/bookings/{booking_id}/approve/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['status'], 'approved')
+        self.assertEqual(response.data['status'], 'awaiting_payment')
+        self.assertEqual(len(mail.outbox), 2)  # submit + approved
 
     def test_admin_reject_booking(self):
         self._login('cust@test.com', 'Pass123!')
@@ -228,7 +299,7 @@ class BookingAPITests(TestCase):
         self._login('admin@test.com', 'AdminPass123!')
         self.client.post(f'/api/bookings/{booking_id}/approve/')
 
-        # Already approved — can't approve again
+        # Already awaiting_payment — can't approve again
         response = self.client.post(f'/api/bookings/{booking_id}/approve/')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -236,13 +307,13 @@ class BookingAPITests(TestCase):
 class AvailabilityTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.customer = User.objects.create_user(
-            email='cust@test.com', username='cust', password='Pass123!',
-        )
+        self.customer = _create_verified_customer()
+        _add_drivers_license(self.customer)
         self.vehicle = Vehicle.objects.create(
             make='Toyota', model='Vios', year=2024, type='Sedan',
             price_per_day=2500.00,
         )
+        self.unit = _add_vehicle_unit(self.vehicle, 'AVA-0001')
         self._login()
 
     def _login(self):
@@ -251,10 +322,11 @@ class AvailabilityTests(TestCase):
         }, format='json')
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
 
-    def _create_booking(self, days_from_now=2, length=3):
+    def _create_booking(self, days_from_now=2, length=3, vehicle_unit=None):
         return Booking.objects.create(
             customer=self.customer,
             vehicle=self.vehicle,
+            vehicle_unit=vehicle_unit or self.unit,
             pickup_date=date.today() + timedelta(days=days_from_now),
             return_date=date.today() + timedelta(days=days_from_now + length),
             pickup_time='09:00',
@@ -269,13 +341,14 @@ class AvailabilityTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['available'])
-        self.assertEqual(response.data['rental_days'], 4)  # inclusive: 10,11,12,13
-        self.assertEqual(response.data['subtotal'], '10000.00')  # 2500 * 4
+        self.assertEqual(response.data['rental_days'], 4)
+        self.assertEqual(response.data['subtotal'], '10000.00')
 
     def test_availability_pending_booking_still_available(self):
         Booking.objects.create(
             customer=self.customer,
             vehicle=self.vehicle,
+            vehicle_unit=self.unit,
             pickup_date=date.today() + timedelta(days=5),
             return_date=date.today() + timedelta(days=8),
             pickup_time='09:00',
@@ -289,7 +362,7 @@ class AvailabilityTests(TestCase):
         )
         self.assertTrue(response.data['available'])
 
-    def test_availability_approved_booking_unavailable(self):
+    def test_availability_confirmed_booking_unavailable(self):
         self._create_booking(days_from_now=5, length=3)
 
         start = str(date.today() + timedelta(days=6))
@@ -315,3 +388,13 @@ class AvailabilityTests(TestCase):
             f'/api/bookings/availability/?vehicle_id={self.vehicle.pk}&start_date={start}&end_date={end}'
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_availability_no_units_unavailable(self):
+        v = Vehicle.objects.create(make='Suzuki', model='Swift', year=2024, type='Hatchback', price_per_day=1500.00)
+        start = str(date.today() + timedelta(days=5))
+        end = str(date.today() + timedelta(days=8))
+        response = self.client.get(
+            f'/api/bookings/availability/?vehicle_id={v.pk}&start_date={start}&end_date={end}'
+        )
+        self.assertFalse(response.data['available'])
+        self.assertIn('No units', response.data['reason'])

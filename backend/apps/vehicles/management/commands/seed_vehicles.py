@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.core.files.base import ContentFile
 from PIL import Image, ImageDraw, ImageFont
 import io
-from apps.vehicles.models import Vehicle, VehicleImage
+from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 
 
 VEHICLE_SEEDS = [
@@ -139,8 +139,18 @@ class Command(BaseCommand):
                     ),
                     is_primary=(i == 0),
                 )
+            # Create 1-3 VehicleUnits per vehicle with unique plate numbers
+            num_units = random.randint(1, 3)
+            for u in range(num_units):
+                plate = f"{seed['make'][:3].upper()}-{created:03d}-{u+1}"
+                VehicleUnit.objects.create(
+                    vehicle=vehicle,
+                    plate_number=plate,
+                    status='available',
+                    mileage=random.randint(1000, 50000),
+                )
             created += 1
-            self.stdout.write(f'  ✓ {seed["make"]} {seed["model"]}')
+            self.stdout.write(f'  ✓ {seed["make"]} {seed["model"]} ({num_units} units)')
 
         self.stdout.write(self.style.SUCCESS(
             f'\nSeeded {created} vehicles with images successfully.'
