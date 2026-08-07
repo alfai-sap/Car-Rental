@@ -52,3 +52,28 @@ class VehicleImage(models.Model):
 
     def __str__(self):
         return f"Image for {self.vehicle} {'(primary)' if self.is_primary else ''}"
+
+
+class VehicleUnit(models.Model):
+    STATUS_CHOICES = [
+        ('available', 'Available'),
+        ('reserved', 'Reserved'),
+        ('booked', 'Booked'),
+        ('active_rental', 'Active Rental'),
+        ('maintenance', 'Maintenance'),
+        ('inactive', 'Inactive'),
+    ]
+
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='units')
+    plate_number = models.CharField(max_length=20, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
+    mileage = models.PositiveIntegerField(default=0, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['plate_number']
+
+    def __str__(self):
+        return f"{self.plate_number} — {self.vehicle} ({self.get_status_display()})"

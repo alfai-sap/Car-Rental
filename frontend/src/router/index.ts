@@ -89,6 +89,12 @@ const router = createRouter({
       component: () => import('@/views/AdminLoginView.vue'),
       meta: { guestOnly: true },
     },
+    {
+      path: '/admin/vehicles',
+      name: 'admin-vehicles',
+      component: () => import('@/views/AdminVehiclesView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

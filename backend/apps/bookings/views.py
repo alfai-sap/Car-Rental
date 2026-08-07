@@ -99,9 +99,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking = self.get_object()
         if not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
-        if booking.status != 'confirmed':
-            return Response({'detail': 'Only confirmed bookings can be marked active.'}, status=status.HTTP_400_BAD_REQUEST)
+        if booking.status not in ['confirmed', 'waiting_for_pickup']:
+            return Response({'detail': 'Only confirmed or waiting bookings can be marked active.'}, status=status.HTTP_400_BAD_REQUEST)
         booking.status = 'active'
+        booking.handover_time = timezone.now()
         booking.save()
         return Response(BookingSerializer(booking).data)
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
@@ -85,6 +85,16 @@ function resetZoom() {
 function formatPrice(price: string): string {
   return `₱${Number(price).toLocaleString('en-PH')}/day`
 }
+
+const weeklyPrice = computed(() => {
+  if (!vehicle.value) return ''
+  return `₱${(Number(vehicle.value.price_per_day) * 7).toLocaleString('en-PH')}/week`
+})
+
+const monthlyPrice = computed(() => {
+  if (!vehicle.value) return ''
+  return `₱${(Number(vehicle.value.price_per_day) * 30).toLocaleString('en-PH')}/month`
+})
 
 onMounted(async () => {
   try {
@@ -233,7 +243,17 @@ onMounted(async () => {
           <div class="rounded-lg border border-zinc-200 bg-white p-6 h-fit space-y-4">
             <div>
               <p class="text-2xl font-bold text-zinc-900">{{ formatPrice(vehicle.price_per_day) }}</p>
-              <p class="text-xs text-zinc-500 mt-1">Free cancellation up to 24 hours before pickup</p>
+              <div class="flex gap-3 mt-2">
+                <div class="rounded-md bg-zinc-50 border border-zinc-100 px-2.5 py-1.5">
+                  <p class="text-xs text-zinc-500">Weekly</p>
+                  <p class="text-sm font-medium text-zinc-800">{{ weeklyPrice }}</p>
+                </div>
+                <div class="rounded-md bg-zinc-50 border border-zinc-100 px-2.5 py-1.5">
+                  <p class="text-xs text-zinc-500">Monthly</p>
+                  <p class="text-sm font-medium text-zinc-800">{{ monthlyPrice }}</p>
+                </div>
+              </div>
+              <p class="text-xs text-zinc-500 mt-3">Free cancellation up to 24 hours before pickup</p>
             </div>
 
             <!-- Existing booking -->

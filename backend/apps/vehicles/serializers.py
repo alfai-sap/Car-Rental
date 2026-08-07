@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.vehicles.models import Vehicle, VehicleImage
+from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 
 
 class VehicleImageSerializer(serializers.ModelSerializer):
@@ -45,10 +45,38 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
 
 
 class VehicleWriteSerializer(serializers.ModelSerializer):
-    """Write-only serializer for create/update — excludes nested images."""
+    """Write-only serializer for create/update with image upload support."""
+    uploaded_images = serializers.ListField(
+        child=serializers.ImageField(),
+        write_only=True,
+        required=False,
+    )
+
     class Meta:
         model = Vehicle
         fields = [
             'make', 'model', 'year', 'type', 'transmission', 'fuel',
-            'seats', 'price_per_day', 'status', 'description',
+            'seats', 'price_per_day', 'status', 'description', 'uploaded_images',
         ]
+
+    def create(self, validated_data):
+        images = validated_data.pop('uploaded_images', [])
+        vehicle = Vehicle.objects.create(**validated_data)
+        for img in images:
+            VehicleImage.objects.create(vehicle=vehicle, image=img)
+        return vehicle
+
+
+class VehicleUnitSerializer(serializers.ModelSerializer):
+    vehicle_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = VehicleUnit
+        fields = [
+            'id', 'vehicle', 'vehicle_name', 'plate_number', 'status',
+            'mileage', 'notes', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_vehicle_name(self, obj):
+        return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"

@@ -10,6 +10,7 @@ class Booking(models.Model):
         ('approved', 'Approved'),
         ('awaiting_payment', 'Awaiting Payment'),
         ('confirmed', 'Confirmed'),
+        ('waiting_for_pickup', 'Waiting for Pickup'),
         ('active', 'Active Rental'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
@@ -27,6 +28,13 @@ class Booking(models.Model):
         on_delete=models.PROTECT,
         related_name='bookings',
     )
+    vehicle_unit = models.ForeignKey(
+        'vehicles.VehicleUnit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bookings',
+    )
     pickup_date = models.DateField()
     return_date = models.DateField()
     pickup_time = models.TimeField()
@@ -37,6 +45,7 @@ class Booking(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
     special_request = models.TextField(blank=True)
     rejection_reason = models.TextField(blank=True)
+    handover_time = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

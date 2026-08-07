@@ -20,7 +20,8 @@ class BookingSerializer(serializers.ModelSerializer):
             'vehicle', 'vehicle_name', 'vehicle_images',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
-            'special_request', 'rejection_reason', 'created_at', 'updated_at',
+            'special_request', 'rejection_reason', 'handover_time',
+            'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'booking_number', 'customer', 'rental_days', 'subtotal',

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { User } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 const dropdownOpen = ref(false)
 
 function toggleDropdown() {
@@ -14,6 +15,12 @@ function toggleDropdown() {
 
 function closeDropdown() {
   dropdownOpen.value = false
+}
+
+async function handleLogout() {
+  await auth.logout()
+  closeDropdown()
+  router.push({ name: 'home' })
 }
 
 onMounted(async () => {
@@ -67,10 +74,17 @@ onMounted(async () => {
                   class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
                   @click="closeDropdown"
                 >
-                  Admin
+                  Dashboard
+                </RouterLink>
+                <RouterLink
+                  to="/admin/vehicles"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Manage Vehicles
                 </RouterLink>
                 <button
-                  @click="auth.logout(); closeDropdown()"
+                  @click="handleLogout()"
                   class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
                 >
                   Sign Out
@@ -92,7 +106,7 @@ onMounted(async () => {
                   Profile
                 </RouterLink>
                 <button
-                  @click="auth.logout(); closeDropdown()"
+                  @click="handleLogout()"
                   class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
                 >
                   Sign Out

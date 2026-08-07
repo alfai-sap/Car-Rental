@@ -2,12 +2,13 @@ from rest_framework import viewsets, filters
 from rest_framework.permissions import AllowAny, IsAdminUser, SAFE_METHODS
 from django_filters.rest_framework import DjangoFilterBackend
 
-from apps.vehicles.models import Vehicle, VehicleImage
+from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 from apps.vehicles.serializers import (
     VehicleListSerializer,
     VehicleDetailSerializer,
     VehicleWriteSerializer,
     VehicleImageSerializer,
+    VehicleUnitSerializer,
 )
 
 
@@ -37,9 +38,9 @@ class VehicleViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        # Guests see only available vehicles; admins see available + rented
+        # Guests see only available vehicles; admins see all statuses
         if self.request.user.is_staff:
-            return Vehicle.objects.prefetch_related('images').filter(status__in=['available', 'rented', 'maintenance'])
+            return Vehicle.objects.prefetch_related('images').all()
         return qs
 
 
@@ -50,6 +51,21 @@ class VehicleImageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return VehicleImage.objects.filter(vehicle_id=self.kwargs.get('vehicle_pk'))
+
+    def perform_create(self, serializer):
+        serializer.save(vehicle_id=self.kwargs['vehicle_pk'])
+
+
+class VehicleUnitViewSet(viewsets.ModelViewSet):
+    queryset = VehicleUnit.objects.select_related('vehicle').all()
+    serializer_class = VehicleUnitSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    lookup_field = 'pk'
+
+    def get_queryset(self):
+        return VehicleUnit.objects.select_related('vehicle').filter(
+            vehicle_id=self.kwargs.get('vehicle_pk')
+        )
 
     def perform_create(self, serializer):
         serializer.save(vehicle_id=self.kwargs['vehicle_pk'])
