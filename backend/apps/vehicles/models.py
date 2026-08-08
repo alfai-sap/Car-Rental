@@ -33,6 +33,7 @@ class Vehicle(models.Model):
     model = models.CharField(max_length=50)          # e.g. Vios, Civic
     year = models.PositiveIntegerField()
     type = models.CharField(max_length=30)           # e.g. Sedan, SUV, Hatchback
+    # Note: blank=False is the default for CharField; fields with blank=True
     transmission = models.CharField(max_length=15, choices=TRANSMISSION_CHOICES, default='automatic')
     fuel = models.CharField(max_length=15, choices=FUEL_CHOICES, default='gasoline')
     seats = models.PositiveSmallIntegerField(default=5)

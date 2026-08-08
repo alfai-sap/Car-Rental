@@ -122,6 +122,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
+        notify.notify_booking_cancelled(booking)
         return Response(BookingSerializer(booking).data)
 
     # ── Admin actions ──
@@ -209,6 +210,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             )
         booking.status = 'waiting_for_pickup'
         booking.save()
+        notify.notify_pickup_reminder(booking)
         return Response(BookingSerializer(booking).data)
 
     @action(detail=True, methods=['post'], url_path='mark-active')

@@ -136,17 +136,32 @@ function handleCreateImages(e: Event) {
 async function submitCreateVehicle() {
   creating.value = true
   createError.value = ''
+
+  // ── Client-side validation ──
+  const errors: string[] = []
+  const f = createForm.value
+  if (!f.make.trim()) errors.push('Make is required.')
+  if (!f.model.trim()) errors.push('Model is required.')
+  if (!f.type.trim()) errors.push('Vehicle type is required.')
+  if (!f.price_per_day || Number(f.price_per_day) <= 0) errors.push('Price per day must be greater than 0.')
+  if (!f.year || f.year < 1900) errors.push('Year must be 1900 or later.')
+  if (errors.length > 0) {
+    createError.value = errors.join(' ')
+    creating.value = false
+    return
+  }
+
   try {
     const fd = new FormData()
-    fd.append('make', createForm.value.make)
-    fd.append('model', createForm.value.model)
-    fd.append('year', String(createForm.value.year))
-    fd.append('type', createForm.value.type)
-    fd.append('transmission', createForm.value.transmission)
-    fd.append('fuel', createForm.value.fuel)
-    fd.append('seats', String(createForm.value.seats))
-    fd.append('price_per_day', createForm.value.price_per_day)
-    fd.append('description', createForm.value.description)
+    fd.append('make', f.make.trim())
+    fd.append('model', f.model.trim())
+    fd.append('year', String(f.year))
+    fd.append('type', f.type.trim())
+    fd.append('transmission', f.transmission)
+    fd.append('fuel', f.fuel)
+    fd.append('seats', String(f.seats))
+    fd.append('price_per_day', String(f.price_per_day))
+    fd.append('description', f.description.trim())
     for (const img of createImages.value) {
       fd.append('uploaded_images', img)
     }
@@ -160,21 +175,23 @@ async function submitCreateVehicle() {
     if (status === 403) {
       createError.value = 'You do not have permission to perform this action. Please try refreshing the page or logging in again.'
     } else if (status === 500) {
-      createError.value = 'A server error occurred. Please try again later.'
-    } else if (typeof data === 'string' && (data.startsWith('<!DOCTYPE') || data.startsWith('<html') || data.startsWith('<!'))) {
-      createError.value = 'An unexpected error occurred. Please try again.'
-    } else if (typeof data === 'string') {
-      createError.value = data
+      createError.value = 'A server error occurred. Please check your input and try again.'
     } else if (data && typeof data === 'object') {
+      // Collect all error messages from DRF validation response
       const messages: string[] = []
       for (const [field, errors] of Object.entries(data)) {
         if (Array.isArray(errors)) {
           for (const err of errors) {
-            if (typeof err === 'string') messages.push(err)
-            else if (typeof err === 'object' && err !== null) {
-              // nested field errors like { images: [{ image: "msg" }] }
-              for (const subErrors of Object.values(err)) {
-                if (Array.isArray(subErrors)) messages.push(...subErrors.filter((v): v is string => typeof v === 'string'))
+            if (typeof err === 'string') {
+              messages.push(err)
+            } else if (typeof err === 'object' && err !== null) {
+              // Nested field errors e.g. { uploaded_images: [{ image: "msg" }] }
+              for (const subVal of Object.values(err)) {
+                if (Array.isArray(subVal)) {
+                  messages.push(...subVal.filter((v): v is string => typeof v === 'string'))
+                } else if (typeof subVal === 'string') {
+                  messages.push(subVal)
+                }
               }
             }
           }
@@ -182,9 +199,12 @@ async function submitCreateVehicle() {
           messages.push(errors)
         }
       }
-      createError.value = messages.length > 0 ? messages.join('. ') : 'Failed to create vehicle.'
+      createError.value = messages.length > 0 ? messages.join('. ') : 'Failed to create vehicle. Please check your input.'
+    } else if (typeof data === 'string' && !data.startsWith('<!')) {
+      // Plain-text error response (non-HTML)
+      createError.value = data
     } else {
-      createError.value = 'Failed to create vehicle.'
+      createError.value = 'An unexpected error occurred. Please try again.'
     }
   } finally {
     creating.value = false

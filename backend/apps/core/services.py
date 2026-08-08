@@ -140,6 +140,12 @@ def notify_booking_approved(booking):
         title='Booking Approved', message=msg,
         booking=booking, link=_booking_link(booking),
     )
+    create_admin_notification(
+        notification_type='booking_approved',
+        title=f'Booking Approved: {booking.booking_number}',
+        message=f"{booking.customer.first_name} {booking.customer.last_name}'s booking for {_vehicle_name(booking)} has been approved.",
+        booking=booking, link=_admin_link(booking),
+    )
     send_email(
         to_email=booking.customer.email,
         subject='Booking Approved — Payment Required',
@@ -156,11 +162,33 @@ def notify_booking_rejected(booking):
         title='Booking Rejected', message=msg,
         booking=booking, link=_booking_link(booking),
     )
+    create_admin_notification(
+        notification_type='booking_rejected',
+        title=f'Booking Rejected: {booking.booking_number}',
+        message=f"{booking.customer.first_name} {booking.customer.last_name}'s booking for {_vehicle_name(booking)} was rejected.{reason}",
+        booking=booking, link=_admin_link(booking),
+    )
     send_email(
         to_email=booking.customer.email,
         subject='Booking Request Declined',
         template_name='emails/booking_rejected.html',
         context={**_email_context(booking), 'rejection_reason': booking.rejection_reason},
+    )
+
+
+def notify_booking_cancelled(booking):
+    reason = f" Reason: {booking.cancellation_reason}" if booking.cancellation_reason else ""
+    msg = f"Your booking #{booking.booking_number} for {_vehicle_name(booking)} has been cancelled.{reason}"
+    create_notification(
+        user=booking.customer, notification_type='transaction_completed',
+        title='Booking Cancelled', message=msg,
+        booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='transaction_completed',
+        title=f'Booking Cancelled: {booking.booking_number}',
+        message=f"{booking.customer.first_name} {booking.customer.last_name}'s booking for {_vehicle_name(booking)} has been cancelled.{reason}",
+        booking=booking, link=_admin_link(booking),
     )
 
 
@@ -179,6 +207,12 @@ def notify_payment_successful(booking):
         user=booking.customer, notification_type='payment_successful',
         title='Payment Successful', message=msg,
         booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='payment_successful',
+        title=f'Payment Received: {booking.booking_number}',
+        message=f"Payment confirmed for {booking.customer.first_name} {booking.customer.last_name}'s booking of {_vehicle_name(booking)}.",
+        booking=booking, link=_admin_link(booking),
     )
     send_email(
         to_email=booking.customer.email,
@@ -203,6 +237,12 @@ def notify_booking_confirmed(booking):
         user=booking.customer, notification_type='booking_confirmed',
         title='Booking Confirmed', message=msg,
         booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='booking_confirmed',
+        title=f'Booking Confirmed: {booking.booking_number}',
+        message=f"{booking.customer.first_name} {booking.customer.last_name}'s booking for {_vehicle_name(booking)} is confirmed.",
+        booking=booking, link=_admin_link(booking),
     )
 
 
@@ -282,6 +322,12 @@ def notify_transaction_completed(booking):
         user=booking.customer, notification_type='transaction_completed',
         title='Transaction Completed', message=msg,
         booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='transaction_completed',
+        title=f'Transaction Completed: {booking.booking_number}',
+        message=f"{booking.customer.first_name} {booking.customer.last_name}'s rental of {_vehicle_name(booking)} has been completed.",
+        booking=booking, link=_admin_link(booking),
     )
 
 

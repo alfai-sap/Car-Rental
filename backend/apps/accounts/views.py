@@ -310,7 +310,7 @@ class NotificationsView(views.APIView):
                 'created_at': n.created_at,
             })
 
-        unread_count = qs.filter(is_read=False).count()
+        unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
 
         return Response({
             'count': len(data),

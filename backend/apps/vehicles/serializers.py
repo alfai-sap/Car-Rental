@@ -65,9 +65,6 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
 class VehicleWriteSerializer(serializers.ModelSerializer):
     """Write-only serializer for create/update with image upload support."""
 
-    make = serializers.CharField(required=False, allow_blank=True)
-    model = serializers.CharField(required=False, allow_blank=True)
-    type = serializers.CharField(required=False, allow_blank=True)
     uploaded_images = serializers.ListField(
         child=serializers.ImageField(),
         write_only=True,
@@ -81,11 +78,48 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
             'seats', 'price_per_day', 'status', 'description', 'uploaded_images',
         ]
         extra_kwargs = {
+            'make': {'required': True, 'allow_blank': False},
+            'model': {'required': True, 'allow_blank': False},
+            'year': {'required': True},
+            'type': {'required': True, 'allow_blank': False},
             'transmission': {'required': False},
             'fuel': {'required': False},
-            'price_per_day': {'required': False},
-            'description': {'required': False},
+            'seats': {'required': False},
+            'price_per_day': {'required': True},
+            'status': {'required': False},
+            'description': {'required': False, 'allow_blank': True},
         }
+
+    def validate_make(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Make is required.')
+        return value.strip()
+
+    def validate_model(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Model is required.')
+        return value.strip()
+
+    def validate_type(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Vehicle type is required.')
+        return value.strip()
+
+    def validate_price_per_day(self, value):
+        if value is None:
+            raise serializers.ValidationError('Price per day is required.')
+        if value <= 0:
+            raise serializers.ValidationError('Price per day must be greater than 0.')
+        return value
+
+    def validate_year(self, value):
+        from django.utils import timezone
+        current_year = timezone.now().year
+        if value < 1900:
+            raise serializers.ValidationError('Year must be 1900 or later.')
+        if value > current_year + 2:
+            raise serializers.ValidationError(f'Year cannot be later than {current_year + 2}.')
+        return value
 
     def create(self, validated_data):
         images = validated_data.pop('uploaded_images', [])
