@@ -44,7 +44,7 @@ class VehicleAPITests(TestCase):
             password='AdminPass123!',
         )
         self.vehicle = Vehicle.objects.create(
-            make='Toyota', model='Vios', year=2024, type='Sedan',
+            make='Toyota', model='Vios', year=2024, type='sedan',
             transmission='automatic', fuel='gasoline', seats=5,
             price_per_day=2500.00, status='available',
         )
@@ -61,7 +61,7 @@ class VehicleAPITests(TestCase):
         self.assertEqual(len(response.data['results']), 1)
 
     def test_list_vehicles_excludes_maintenance_for_public(self):
-        Vehicle.objects.create(make='Honda', model='Civic', year=2024, price_per_day=3000.00, status='maintenance')
+        Vehicle.objects.create(make='Honda', model='Civic', year=2024, price_per_day=3000.00, status='unavailable')
         response = self.client.get('/api/vehicles/')
         self.assertEqual(len(response.data['results']), 1)
 
@@ -80,7 +80,7 @@ class VehicleAPITests(TestCase):
         self._login_admin()
         response = self.client.post('/api/vehicles/', {
             'make': 'Honda', 'model': 'Civic', 'year': 2024,
-            'type': 'Sedan', 'price_per_day': 3000.00,
+            'type': 'sedan', 'price_per_day': 3000.00,
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -101,8 +101,8 @@ class VehicleAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_filter_by_type(self):
-        Vehicle.objects.create(make='Honda', model='CR-V', year=2024, type='SUV', price_per_day=4000.00)
-        response = self.client.get('/api/vehicles/?type=SUV')
+        Vehicle.objects.create(make='Honda', model='CR-V', year=2024, type='suv', price_per_day=4000.00)
+        response = self.client.get('/api/vehicles/?type=suv')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['model'], 'CR-V')
@@ -128,7 +128,7 @@ class VehicleImageAPITests(TestCase):
             password='AdminPass123!',
         )
         self.vehicle = Vehicle.objects.create(
-            make='Toyota', model='Vios', year=2024, type='Sedan',
+            make='Toyota', model='Vios', year=2024, type='sedan',
             price_per_day=2500.00,
         )
 

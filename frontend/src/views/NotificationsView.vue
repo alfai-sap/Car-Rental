@@ -3,10 +3,13 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
 import api from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 import {
   Bell, CheckCircle, XCircle, Clock, AlertCircle,
   CreditCard, Car,
 } from 'lucide-vue-next'
+
+const auth = useAuthStore()
 
 interface Notification {
   id: number
@@ -90,6 +93,7 @@ async function markAllRead() {
     await api.post('/notifications/', { mark_all: true })
     notifications.value.forEach(n => n.is_read = true)
     unreadCount.value = 0
+    auth.unreadNotificationCount = 0
   } catch { /* ignore */ }
 }
 
@@ -98,6 +102,7 @@ onMounted(async () => {
     const response = await api.get('/notifications/')
     notifications.value = response.data.notifications
     unreadCount.value = response.data.unread_count || 0
+    auth.unreadNotificationCount = unreadCount.value
   } catch {
     error.value = 'Failed to load notifications.'
   } finally {

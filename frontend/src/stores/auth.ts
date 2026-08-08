@@ -16,6 +16,7 @@ interface User {
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const isAuthenticated = ref(false)
+  const unreadNotificationCount = ref(0)
 
   function setTokens(access: string, refresh: string) {
     localStorage.setItem('access_token', access)
@@ -28,6 +29,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refresh_token')
     user.value = null
     isAuthenticated.value = false
+    unreadNotificationCount.value = 0
+  }
+
+  async function fetchUnreadCount() {
+    if (!isAuthenticated.value) return
+    try {
+      const response = await api.get('/notifications/?limit=1')
+      unreadNotificationCount.value = response.data.unread_count || 0
+    } catch { /* ignore */ }
   }
 
   async function fetchUser() {
@@ -35,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await api.get('/auth/me/')
       user.value = response.data
       isAuthenticated.value = true
+      await fetchUnreadCount()
     } catch {
       clearTokens()
     }
@@ -44,6 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
     const response = await api.post('/auth/login/', { email, password })
     setTokens(response.data.access, response.data.refresh)
     user.value = response.data.user
+    await fetchUnreadCount()
   }
 
   async function register(data: {
@@ -79,6 +91,6 @@ export const useAuthStore = defineStore('auth', () => {
     clearTokens()
   }
 
-  return { user, isAuthenticated, login, register, verifyEmail, resendVerification, logout, fetchUser }
+  return { user, isAuthenticated, unreadNotificationCount, login, register, verifyEmail, resendVerification, logout, fetchUser, fetchUnreadCount }
 })
 

@@ -4,12 +4,10 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { User } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
-import api from '@/services/api'
 
 const auth = useAuthStore()
 const router = useRouter()
 const dropdownOpen = ref(false)
-const unreadNotifications = ref(0)
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
@@ -25,21 +23,13 @@ async function handleLogout() {
   router.push({ name: 'home' })
 }
 
-async function fetchUnreadCount() {
-  if (!auth.isAuthenticated) return
-  try {
-    const response = await api.get('/notifications/')
-    unreadNotifications.value = response.data.unread_count || 0
-  } catch { /* ignore */ }
-}
-
 onMounted(async () => {
   const token = localStorage.getItem('access_token')
   if (token && !auth.user) {
     await auth.fetchUser()
   }
-  await fetchUnreadCount()
-  setInterval(fetchUnreadCount, 60000)
+  await auth.fetchUnreadCount()
+  setInterval(() => auth.fetchUnreadCount(), 60000)
 })
 </script>
 
@@ -70,7 +60,7 @@ onMounted(async () => {
               v-if="unreadNotifications > 0"
               class="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
             >
-              {{ unreadNotifications > 99 ? '99+' : unreadNotifications }}
+              {{ auth.unreadNotificationCount > 99 ? '99+' : auth.unreadNotificationCount }}
             </span>
           </button>
 

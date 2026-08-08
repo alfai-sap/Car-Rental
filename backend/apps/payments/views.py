@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from apps.bookings.models import Booking
 from apps.payments.models import Invoice, Payment
+from apps.core import services as notify
 
 
 def payment_gateway_enabled():
@@ -49,6 +50,7 @@ class PaymentCreateSessionView(APIView):
 			if booking.status == 'approved':
 				booking.status = 'awaiting_payment'
 				booking.save()
+				notify.notify_payment_required(booking)
 			invoice, _ = Invoice.objects.get_or_create(
 				booking=booking,
 				defaults={

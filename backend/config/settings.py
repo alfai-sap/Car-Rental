@@ -93,6 +93,10 @@ USE_TZ = True
 AUTH_USER_MODEL = 'accounts.User'
 
 # Email
+# if DEBUG:
+#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# else:
+#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
@@ -154,6 +158,7 @@ REST_FRAMEWORK = {
         'user': '2000/minute',
         'login': '5/minute',
     },
+    'EXCEPTION_HANDLER': 'apps.core.exception_handler.custom_exception_handler',
 }
 
 # JWT

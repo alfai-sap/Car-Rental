@@ -447,8 +447,11 @@ class AdminDashboardView(APIView):
                      'waiting_for_pickup', 'active', 'completed', 'cancelled', 'rejected']:
             groups[key] = [b for b in serializer.data if b['status'] == key]
 
+        summary_data = {key: len(v) for key, v in groups.items()}
+        summary_data['total'] = len(serializer.data)
+
         return Response({
-            'summary': {key: len(v) for key, v in groups.items()},
+            'summary': summary_data,
             'total': len(serializer.data),
             'bookings': serializer.data,
         })

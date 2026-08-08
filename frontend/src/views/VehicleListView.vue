@@ -28,7 +28,7 @@ const selectedTransmission = ref('')
 const selectedFuel = ref('')
 const sortBy = ref('-created_at')
 
-const types = ['Sedan', 'SUV', 'Hatchback', 'MPV', 'Pickup', 'Van', 'Coupe']
+const types = ['sedan', 'suv', 'hatchback', 'mpv', 'pickup', 'van', 'coupe']
 const transmissions = ['automatic', 'manual']
 const fuels = ['gasoline', 'diesel', 'electric', 'hybrid']
 

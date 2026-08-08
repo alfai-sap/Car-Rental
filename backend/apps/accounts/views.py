@@ -287,16 +287,35 @@ class LogoutView(views.APIView):
 
 
 class NotificationsView(views.APIView):
-    """Return real in-app notifications for the current user."""
+    """Return real in-app notifications for the current user.
+
+    Supports ?limit=N and ?offset=M query params for pagination.
+    Default limit is 50, max 100.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from apps.core.models import Notification
 
-        qs = Notification.objects.filter(user=request.user).order_by('-created_at')[:50]
+        try:
+            limit = int(request.query_params.get('limit', 50))
+        except (ValueError, TypeError):
+            limit = 50
+        limit = max(1, min(limit, 100))
+
+        try:
+            offset = int(request.query_params.get('offset', 0))
+        except (ValueError, TypeError):
+            offset = 0
+        offset = max(0, offset)
+
+        qs = Notification.objects.filter(user=request.user).order_by('-created_at')
+        unread_count = qs.filter(is_read=False).count()
+
+        notifications_qs = qs[offset:offset + limit]
 
         data = []
-        for n in qs:
+        for n in notifications_qs:
             data.append({
                 'id': n.id,
                 'notification_type': n.notification_type,
@@ -310,10 +329,8 @@ class NotificationsView(views.APIView):
                 'created_at': n.created_at,
             })
 
-        unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
-
         return Response({
-            'count': len(data),
+            'count': qs.count(),
             'unread_count': unread_count,
             'notifications': data,
         })

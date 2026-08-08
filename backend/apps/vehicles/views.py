@@ -21,7 +21,7 @@ class IsAdminOrReadOnly(IsAdminUser):
 
 
 class VehicleViewSet(viewsets.ModelViewSet):
-    queryset = Vehicle.objects.prefetch_related('images').filter(status__in=['available', 'rented'])
+    queryset = Vehicle.objects.prefetch_related('images').filter(status='available')
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['type', 'transmission', 'fuel', 'seats', 'status']

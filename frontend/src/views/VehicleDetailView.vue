@@ -266,6 +266,12 @@ onMounted(async () => {
               </p>
             </div>
 
+            <!-- Unavailable status message -->
+            <div v-if="vehicle.status === 'unavailable'" class="rounded-md bg-red-50 border border-red-200 p-3 text-center">
+              <p class="text-sm font-medium text-red-700 mb-1">This vehicle is currently unavailable</p>
+              <p class="text-xs text-red-600">It has been marked as unavailable by the administrator and cannot be booked at this time.</p>
+            </div>
+
             <!-- Existing booking -->
             <template v-if="checkingBooking">
               <Button class="w-full" disabled>Checking...</Button>
@@ -285,9 +291,10 @@ onMounted(async () => {
               </RouterLink>
             </template>
             <template v-else>
-              <RouterLink :to="`/vehicles/${vehicle.id}/book`">
+              <RouterLink v-if="vehicle.status === 'available'" :to="`/vehicles/${vehicle.id}/book`">
                 <Button class="w-full">Book Now</Button>
               </RouterLink>
+              <Button v-else class="w-full" disabled>Unavailable</Button>
             </template>
           </div>
         </div>

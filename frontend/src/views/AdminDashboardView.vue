@@ -70,7 +70,7 @@ const STATUS_TABS = [
   { key: 'rejected', label: 'Rejected' },
 ] as const
 
-const activeTab = ref<string>('pending_approval')
+const activeTab = ref<string>('all')
 const currentPage = ref(1)
 const perPage = 5
 const filterDropdownOpen = ref(false)
@@ -297,7 +297,7 @@ onMounted(async () => {
 
       <template v-else>
         <!-- Summary Cards -->
-        <div v-if="summary" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+        <div v-if="summary" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
             <p class="text-2xl font-bold text-amber-800">{{ summary.pending_approval }}</p>
             <p class="text-xs text-amber-600 mt-1">Pending Review</p>
@@ -313,6 +313,10 @@ onMounted(async () => {
           <div class="rounded-md border border-emerald-200 bg-emerald-50 p-4">
             <p class="text-2xl font-bold text-emerald-800">{{ summary.active }}</p>
             <p class="text-xs text-emerald-600 mt-1">Active Rentals</p>
+          </div>
+          <div class="rounded-md border border-violet-200 bg-violet-50 p-4">
+            <p class="text-2xl font-bold text-violet-800">{{ summary.completed }}</p>
+            <p class="text-xs text-violet-600 mt-1">Completed</p>
           </div>
           <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
             <p class="text-2xl font-bold text-zinc-800">{{ summary.total }}</p>

@@ -1,3 +1,4 @@
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 
@@ -24,16 +25,26 @@ class Vehicle(models.Model):
 
     STATUS_CHOICES = [
         ('available', 'Available'),
-        ('rented', 'Rented'),
-        ('maintenance', 'Maintenance'),
-        ('retired', 'Retired'),
+        ('unavailable', 'Unavailable'),
+    ]
+
+    VEHICLE_TYPE_CHOICES = [
+        ('sedan', 'Sedan'),
+        ('suv', 'SUV'),
+        ('hatchback', 'Hatchback'),
+        ('mpv', 'MPV'),
+        ('van', 'Van'),
+        ('pickup', 'Pickup'),
+        ('truck', 'Truck'),
+        ('coupe', 'Coupe'),
+        ('convertible', 'Convertible'),
+        ('wagon', 'Wagon'),
     ]
 
     make = models.CharField(max_length=50)          # e.g. Toyota, Honda
     model = models.CharField(max_length=50)          # e.g. Vios, Civic
     year = models.PositiveIntegerField()
-    type = models.CharField(max_length=30)           # e.g. Sedan, SUV, Hatchback
-    # Note: blank=False is the default for CharField; fields with blank=True
+    type = models.CharField(max_length=30, choices=VEHICLE_TYPE_CHOICES, default='sedan')
     transmission = models.CharField(max_length=15, choices=TRANSMISSION_CHOICES, default='automatic')
     fuel = models.CharField(max_length=15, choices=FUEL_CHOICES, default='gasoline')
     seats = models.PositiveSmallIntegerField(default=5)
@@ -52,7 +63,10 @@ class Vehicle(models.Model):
 
 class VehicleImage(models.Model):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='vehicles/')
+    image = models.ImageField(
+        upload_to='vehicles/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp'])],
+    )
     is_primary = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

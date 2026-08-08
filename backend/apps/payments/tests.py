@@ -36,7 +36,7 @@ class PaymentAPITests(TestCase):
 			fuel='gasoline',
 			seats=5,
 			price_per_day=1500,
-			status='available',
+			status='active',
 		)
 		self.booking = Booking.objects.create(
 			customer=self.customer,

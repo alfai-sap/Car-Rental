@@ -92,7 +92,14 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         if self.instance is not None:
-            return data  # updates go through without re-validating dates/identity
+            # Partial validation for updates — only check dates if both are being changed
+            pickup_date = data.get('pickup_date', self.instance.pickup_date)
+            return_date = data.get('return_date', self.instance.return_date)
+            if pickup_date < timezone.now().date():
+                raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
+            if return_date < pickup_date:
+                raise serializers.ValidationError({'return_date': 'Return date must be after pickup date.'})
+            return data
 
         customer = self.context['request'].user
         pickup_date = data.get('pickup_date')
@@ -117,6 +124,12 @@ class BookingSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
 
         if vehicle:
+            # ── Vehicle listing status check ──
+            if vehicle.status != 'available':
+                raise serializers.ValidationError({
+                    'vehicle': 'This vehicle is currently unavailable for booking.',
+                })
+
             # VehicleUnit-level availability: at least one unit must be free
             total = VehicleUnit.objects.filter(vehicle=vehicle).count()
             if total == 0:

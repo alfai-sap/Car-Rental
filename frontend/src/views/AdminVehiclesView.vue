@@ -45,8 +45,7 @@ const perPage = 5
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
   { key: 'available', label: 'Available' },
-  { key: 'rented', label: 'Rented' },
-  { key: 'maintenance', label: 'Maintenance' },
+  { key: 'unavailable', label: 'Unavailable' },
 ]
 
 const SORT_OPTIONS = [
@@ -112,7 +111,7 @@ const creating = ref(false)
 const createError = ref('')
 const createForm = ref({
   make: '', model: '', year: new Date().getFullYear(),
-  type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+  type: 'sedan', transmission: 'automatic', fuel: 'gasoline',
   seats: 5, price_per_day: '', description: '',
 })
 const createImages = ref<File[]>([])
@@ -230,9 +229,7 @@ function formatPrice(price: string): string {
 function statusBadgeClass(status: string): string {
   switch (status) {
     case 'available': return 'bg-green-100 text-green-800'
-    case 'rented': return 'bg-blue-100 text-blue-800'
-    case 'maintenance': return 'bg-amber-100 text-amber-800'
-    case 'retired': return 'bg-zinc-100 text-zinc-500'
+    case 'unavailable': return 'bg-zinc-100 text-zinc-500'
     default: return 'bg-zinc-100 text-zinc-800'
   }
 }
@@ -443,7 +440,7 @@ onMounted(fetchVehicles)
             <div class="space-y-1">
               <label class="text-xs font-medium text-zinc-700">Type</label>
               <select v-model="createForm.type" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm">
-                <option>Sedan</option><option>SUV</option><option>Hatchback</option><option>Van</option><option>Truck</option><option>Coupe</option>
+                <option value="sedan">Sedan</option><option value="suv">SUV</option><option value="hatchback">Hatchback</option><option value="mpv">MPV</option><option value="van">Van</option><option value="pickup">Pickup</option><option value="truck">Truck</option><option value="coupe">Coupe</option>
               </select>
             </div>
             <div class="space-y-1">

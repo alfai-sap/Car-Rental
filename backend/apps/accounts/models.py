@@ -1,5 +1,14 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import FileExtensionValidator
 from django.db import models
+
+
+def _validate_image_size(image):
+    """Reject images larger than 10 MB."""
+    limit_mb = 10
+    if image.size > limit_mb * 1024 * 1024:
+        from django.core.exceptions import ValidationError
+        raise ValidationError(f"Image file too large (max {limit_mb} MB).")
 
 
 class User(AbstractUser):
@@ -19,8 +28,15 @@ class IdentityDocument(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='identity_documents')
     document_type = models.CharField(max_length=50)  # e.g. 'drivers_license', 'passport', 'national_id'
     document_number = models.CharField(max_length=50)
-    front_image = models.ImageField(upload_to='identity_docs/front/')
-    back_image = models.ImageField(upload_to='identity_docs/back/', blank=True, null=True)
+    front_image = models.ImageField(
+        upload_to='identity_docs/front/',
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp']), _validate_image_size],
+    )
+    back_image = models.ImageField(
+        upload_to='identity_docs/back/',
+        blank=True, null=True,
+        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp']), _validate_image_size],
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

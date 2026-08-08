@@ -70,7 +70,7 @@ function nextImage() {
 const editingInfo = ref(false)
 const editForm = ref({
   make: '', model: '', year: 0, type: '', transmission: '', fuel: '',
-  seats: 0, price_per_day: '', description: '',
+  seats: 0, price_per_day: '', description: '', status: 'available',
 })
 
 // ── Unit management ──
@@ -139,6 +139,7 @@ function startEditInfo() {
     seats: vehicle.value.seats,
     price_per_day: vehicle.value.price_per_day,
     description: vehicle.value.description,
+    status: vehicle.value.status,
   }
   editingInfo.value = true
 }
@@ -163,6 +164,7 @@ async function saveVehicleInfo() {
       seats: editForm.value.seats,
       price_per_day: editForm.value.price_per_day,
       description: editForm.value.description,
+      status: editForm.value.status,
     }
     if (isNew.value) {
       const response = await api.post('/vehicles/', payload)
@@ -452,9 +454,19 @@ function unitStatusBadge(status: string): string {
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Type</label>
                     <select v-model="editForm.type" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
-                      <option>Sedan</option><option>SUV</option><option>Hatchback</option><option>MPV</option><option>Van</option><option>Pickup</option>
+                      <option value="sedan">Sedan</option><option value="suv">SUV</option><option value="hatchback">Hatchback</option><option value="mpv">MPV</option><option value="van">Van</option><option value="pickup">Pickup</option><option value="truck">Truck</option><option value="coupe">Coupe</option>
                     </select>
                   </div>
+                  <div class="space-y-1">
+                    <label class="text-xs font-medium text-zinc-700">Status</label>
+                    <select v-model="editForm.status" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+                      <option value="available">Available</option>
+                      <option value="unavailable">Unavailable</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Seats</label>
                     <input v-model.number="editForm.seats" type="number" min="1" max="20" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
