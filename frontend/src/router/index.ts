@@ -124,7 +124,7 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    next({ name: 'login' })
+    next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.meta.guestOnly && auth.isAuthenticated) {
     if (auth.user?.is_staff) {
       next({ name: 'admin-dashboard' })

@@ -10,14 +10,17 @@ class VehicleImageSerializer(serializers.ModelSerializer):
 
 
 class VehicleListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for list/catalog view — includes primary image only."""
+    """Lightweight serializer for list/catalog view — includes primary image and unit count."""
     primary_image = serializers.SerializerMethodField()
+    total_units = serializers.SerializerMethodField()
+    available_units = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
         fields = [
             'id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
-            'seats', 'price_per_day', 'status', 'primary_image', 'created_at',
+            'seats', 'price_per_day', 'status', 'primary_image',
+            'total_units', 'available_units', 'created_at',
         ]
 
     def get_primary_image(self, obj):
@@ -29,19 +32,34 @@ class VehicleListSerializer(serializers.ModelSerializer):
             return self.context.get('request').build_absolute_uri(first.image.url) if self.context.get('request') else first.image.url
         return None
 
+    def get_total_units(self, obj):
+        return obj.units.count()
+
+    def get_available_units(self, obj):
+        return obj.units.filter(status='available').count()
+
 
 class VehicleDetailSerializer(serializers.ModelSerializer):
-    """Full serializer for detail view — includes all images (read only)."""
+    """Full serializer for detail view — includes all images, unit counts (read only)."""
     images = VehicleImageSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    available_units = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
         fields = [
             'id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'description', 'images',
+            'total_units', 'available_units',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'images']
+
+    def get_total_units(self, obj):
+        return obj.units.count()
+
+    def get_available_units(self, obj):
+        return obj.units.filter(status='available').count()
 
 
 class VehicleWriteSerializer(serializers.ModelSerializer):

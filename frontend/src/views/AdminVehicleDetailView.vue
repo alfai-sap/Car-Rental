@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
@@ -87,7 +87,19 @@ const deleteUnitId = ref<number | null>(null)
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
 
+const isNew = computed(() => route.params.id === 'new')
+
 async function fetchVehicle() {
+  if (isNew.value) {
+    vehicle.value = {
+      id: 0, make: '', model: '', year: new Date().getFullYear(),
+      type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+      seats: 5, price_per_day: '', status: 'available', description: '',
+      images: [], created_at: '', updated_at: '',
+    }
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const response = await api.get(`/vehicles/${route.params.id}/`)
@@ -100,6 +112,7 @@ async function fetchVehicle() {
 }
 
 async function fetchUnits() {
+  if (isNew.value) { unitsLoading.value = false; return }
   unitsLoading.value = true
   try {
     const response = await api.get(`/vehicles/${route.params.id}/units/`)
@@ -151,19 +164,40 @@ async function saveVehicleInfo() {
       price_per_day: editForm.value.price_per_day,
       description: editForm.value.description,
     }
-    await api.put(`/vehicles/${route.params.id}/`, payload)
-    editingInfo.value = false
-    await fetchVehicle()  // re-fetch to get VehicleDetailSerializer (with images)
+    if (isNew.value) {
+      const response = await api.post('/vehicles/', payload)
+      router.push({ name: 'admin-vehicle-detail', params: { id: response.data.id } })
+    } else {
+      await api.put(`/vehicles/${route.params.id}/`, payload)
+      editingInfo.value = false
+      await fetchVehicle()
+    }
   } catch (e: any) {
-    saveError.value = e?.response?.data
-      ? Object.values(e.response.data).flat().join(', ')
-      : 'Failed to save.'
+    const data = e?.response?.data
+    const status = e?.response?.status
+    if (status === 403) {
+      saveError.value = 'You do not have permission. Please log in again.'
+    } else if (typeof data === 'string' && (data.startsWith('<!') || data.startsWith('<html'))) {
+      saveError.value = 'An unexpected error occurred. Please try again.'
+    } else if (typeof data === 'string') {
+      saveError.value = data
+    } else if (data && typeof data === 'object') {
+      const messages: string[] = []
+      for (const [, errors] of Object.entries(data)) {
+        if (Array.isArray(errors)) messages.push(...errors.filter((v): v is string => typeof v === 'string'))
+        else if (typeof errors === 'string') messages.push(errors)
+      }
+      saveError.value = messages.length > 0 ? messages.join('. ') : 'Failed to save.'
+    } else {
+      saveError.value = 'Failed to save.'
+    }
   } finally {
     saving.value = false
   }
 }
 
 async function deleteVehicle() {
+  if (isNew.value) return
   deleting.value = true
   try {
     await api.delete(`/vehicles/${route.params.id}/`)

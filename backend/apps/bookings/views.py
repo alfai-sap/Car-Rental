@@ -1,9 +1,7 @@
 import logging
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
-from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
@@ -12,11 +10,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 
-from apps.bookings.models import Booking
+from apps.bookings.models import Booking, AssignmentHistory
 from apps.bookings.serializers import (
     BookingSerializer, BookingStatusUpdateSerializer,
     DashboardBookingSerializer, AdminDashboardBookingSerializer,
+    AssignmentHistorySerializer, UnitAssignmentSerializer,
 )
+from apps.core import services as notify
 from apps.vehicles.models import Vehicle, VehicleUnit
 
 logger = logging.getLogger(__name__)
@@ -26,50 +26,6 @@ logger = logging.getLogger(__name__)
 # Only these statuses occupy a VehicleUnit and block availability.
 UNIT_OCCUPYING_STATUSES = ['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active']
 
-# ── Shared email helper ──
-def _send_booking_email(booking, subject, template_name, extra_context=None):
-    """Send a booking-related email to the customer."""
-    user = booking.customer
-    ctx = {
-        'first_name': user.first_name or 'there',
-        'booking': booking,
-        'booking_number': booking.booking_number,
-        'vehicle_name': f"{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}",
-        'pickup_date': booking.pickup_date,
-        'return_date': booking.return_date,
-        'estimated_total': booking.estimated_total,
-    }
-    if extra_context:
-        ctx.update(extra_context)
-
-    text_content = (
-        f"Hi {ctx['first_name']},\n\n"
-        f"{subject}\n\n"
-        f"Booking: {ctx['booking_number']}\n"
-        f"Vehicle: {ctx['vehicle_name']}\n"
-        f"Dates: {ctx['pickup_date']} – {ctx['return_date']}\n"
-        f"Total: ₱{ctx['estimated_total']}\n\n"
-        f"View your booking: {settings.FRONTEND_URL}/transactions/{booking.id}\n\n"
-        f"– Car Rental Team"
-    )
-
-    try:
-        html_content = render_to_string(template_name, ctx)
-    except Exception:
-        html_content = None
-
-    msg = EmailMultiAlternatives(
-        subject=subject,
-        body=text_content,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[user.email],
-    )
-    if html_content:
-        msg.attach_alternative(html_content, 'text/html')
-    try:
-        msg.send()
-    except Exception as e:
-        logger.error(f"Failed to send booking email to {user.email}: {e}")
 
 
 def _build_identity_snapshot(user):
@@ -130,25 +86,15 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         with transaction.atomic():
-            vehicle = serializer.validated_data['vehicle']
-            pickup = serializer.validated_data['pickup_date']
-            ret = serializer.validated_data['return_date']
-
-            unit = _find_available_unit(vehicle, pickup, ret)
             snapshot = _build_identity_snapshot(self.request.user)
 
             booking = serializer.save(
                 customer=self.request.user,
-                vehicle_unit=unit,
+                vehicle_unit=None,  # Admin assigns unit after approval
                 identity_snapshot=snapshot,
             )
 
-        _send_booking_email(
-            booking,
-            'Booking Request Received',
-            'emails/booking_submitted.html',
-            extra_context={'booking': booking},
-        )
+        notify.notify_booking_submitted(booking)
 
     def get_serializer_class(self):
         if self.action in ('approve', 'reject'):
@@ -190,27 +136,10 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             booking.status = 'awaiting_payment'
-
-            # Reserve the assigned unit (or assign one if not already)
-            if booking.vehicle_unit:
-                booking.vehicle_unit.status = 'reserved'
-                booking.vehicle_unit.save()
-            else:
-                unit = _find_available_unit(booking.vehicle, booking.pickup_date, booking.return_date)
-                if unit:
-                    unit.status = 'reserved'
-                    unit.save()
-                    booking.vehicle_unit = unit
-
+            # Unit assignment is manual — admin assigns via assign-unit endpoint
             booking.save()
 
-        _send_booking_email(
-            booking,
-            'Booking Approved — Payment Required',
-            'emails/booking_approved.html',
-            extra_context={'booking': booking},
-        )
-
+        notify.notify_booking_approved(booking)
         return Response(BookingSerializer(booking).data)
 
     @action(detail=True, methods=['post'], url_path='reject')
@@ -228,23 +157,22 @@ class BookingViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             booking.status = 'rejected'
             booking.rejection_reason = ser.validated_data.get('rejection_reason', '')
-            # Release unit
             if booking.vehicle_unit:
                 booking.vehicle_unit.status = 'available'
                 booking.vehicle_unit.save()
             booking.save()
 
-        _send_booking_email(
-            booking,
-            'Booking Request Declined',
-            'emails/booking_rejected.html',
-            extra_context={'rejection_reason': booking.rejection_reason},
-        )
-
+        notify.notify_booking_rejected(booking)
         return Response(BookingSerializer(booking).data)
 
     @action(detail=True, methods=['post'], url_path='confirm')
     def confirm(self, request, pk=None):
+        """Admin manually confirms payment (development simulation).
+
+        In production, payment is confirmed via PayMongo webhook only.
+        This endpoint is a backdoor for testing the full booking workflow
+        before payment integration is activated.
+        """
         booking = self.get_object()
         if not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
@@ -258,12 +186,14 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
-        _send_booking_email(
-            booking,
-            'Payment Confirmed — Booking Finalized',
-            'emails/booking_confirmed.html',
+        # Audit log
+        logger.info(
+            'Payment manually confirmed by admin %s (id=%s) for booking %s',
+            request.user.email, request.user.id, booking.booking_number,
         )
 
+        notify.notify_payment_successful(booking)
+        notify.notify_booking_confirmed(booking)
         return Response(BookingSerializer(booking).data)
 
     @action(detail=True, methods=['post'], url_path='mark-waiting')
@@ -288,15 +218,17 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
         if booking.status not in ['confirmed', 'waiting_for_pickup']:
             return Response({'detail': 'Only confirmed or waiting bookings can be marked active.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not booking.vehicle_unit:
+            return Response({'detail': 'A vehicle unit must be assigned before activating.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             booking.status = 'active'
             booking.handover_time = timezone.now()
-            if booking.vehicle_unit:
-                booking.vehicle_unit.status = 'active_rental'
-                booking.vehicle_unit.save()
+            booking.vehicle_unit.status = 'active_rental'
+            booking.vehicle_unit.save()
             booking.save()
 
+        notify.notify_rental_activated(booking)
         return Response(BookingSerializer(booking).data)
 
     @action(detail=True, methods=['post'], url_path='mark-complete')
@@ -307,14 +239,91 @@ class BookingViewSet(viewsets.ModelViewSet):
         if booking.status != 'active':
             return Response({'detail': 'Only active bookings can be marked complete.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        return_unit_status = request.data.get('return_unit_status', '').strip()
+        valid_statuses = ['available', 'maintenance', 'inactive']
+        if return_unit_status not in valid_statuses:
+            return Response(
+                {'detail': f'return_unit_status is required and must be one of: {", ".join(valid_statuses)}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
             booking.status = 'completed'
+            booking.return_unit_status = return_unit_status
+            booking.return_time_actual = timezone.now()
             if booking.vehicle_unit:
-                booking.vehicle_unit.status = 'available'
+                booking.vehicle_unit.status = return_unit_status
                 booking.vehicle_unit.save()
             booking.save()
 
+        notify.notify_vehicle_returned(booking)
+        notify.notify_transaction_completed(booking)
         return Response(BookingSerializer(booking).data)
+
+    # ── Admin: Vehicle Unit Assignment ──
+
+    @action(detail=True, methods=['post'], url_path='assign-unit')
+    def assign_unit(self, request, pk=None):
+        """Admin assigns a vehicle unit to a booking (any status after approval)."""
+        booking = self.get_object()
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status not in ['awaiting_payment', 'confirmed', 'waiting_for_pickup']:
+            return Response({'detail': 'Booking must be awaiting payment, confirmed, or waiting for pickup.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        unit_id = request.data.get('unit_id')
+        reason = request.data.get('reason', 'Initial assignment')
+        if not unit_id:
+            return Response({'detail': 'unit_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            unit = VehicleUnit.objects.get(pk=unit_id, vehicle=booking.vehicle)
+        except VehicleUnit.DoesNotExist:
+            return Response({'detail': 'Vehicle unit not found or does not belong to this vehicle model.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if unit.status != 'available':
+            return Response({'detail': f'Unit {unit.plate_number} is not available (status: {unit.get_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            previous_unit = booking.vehicle_unit
+            previous_plate = previous_unit.plate_number if previous_unit else None
+
+            booking.vehicle_unit = unit
+            booking.save()
+
+            unit.status = 'booked'
+            unit.save()
+
+            if previous_unit and previous_unit != unit:
+                previous_unit.status = 'available'
+                previous_unit.save()
+
+            AssignmentHistory.objects.create(
+                booking=booking,
+                previous_unit=previous_unit,
+                new_unit=unit,
+                reason=reason,
+                changed_by=request.user,
+            )
+
+        if previous_plate:
+            notify.notify_unit_changed(booking, previous_plate, unit.plate_number, reason)
+        else:
+            notify.notify_unit_assigned(booking, unit)
+
+        return Response(BookingSerializer(booking).data)
+
+    @action(detail=True, methods=['get'], url_path='assignment-history')
+    def assignment_history(self, request, pk=None):
+        """Return the assignment history for this booking."""
+        booking = self.get_object()
+        if booking.customer != request.user and not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        history = booking.assignment_history.select_related(
+            'previous_unit', 'new_unit', 'changed_by',
+        ).all()
+        return Response(AssignmentHistorySerializer(history, many=True).data)
 
 
 # ─────────────────────────────────────────────

@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   ChevronLeft, Check, Clock, XCircle, AlertCircle,
-  CreditCard, Car, CheckCircle, Calendar, Shield, User,
+  CreditCard, Car, CheckCircle, Calendar, Shield, User, Truck, RefreshCw,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -38,6 +38,9 @@ interface Booking {
   vehicle: number
   vehicle_name: string
   vehicle_images: VehicleImage[]
+  vehicle_unit: number | null
+  vehicle_unit_plate: string | null
+  vehicle_unit_status: string | null
   pickup_date: string
   return_date: string
   pickup_time: string
@@ -49,8 +52,24 @@ interface Booking {
   status_display: string
   special_request: string
   rejection_reason: string
+  return_unit_status: string
   created_at: string
   updated_at: string
+}
+
+interface UnitOption {
+  id: number
+  plate_number: string
+  status: string
+}
+
+interface AssignmentEntry {
+  id: number
+  previous_plate: string | null
+  new_plate: string
+  reason: string
+  changed_by_name: string
+  created_at: string
 }
 
 const booking = ref<Booking | null>(null)
@@ -62,6 +81,29 @@ const rejectReasonCustom = ref('')
 const showRejectDialog = ref(false)
 const showRejectConfirmModal = ref(false)
 const lightboxImage = ref('')
+
+// Unit assignment state
+const availableUnits = ref<UnitOption[]>([])
+const loadingUnits = ref(false)
+const selectedUnitId = ref<number | null>(null)
+const assignmentReason = ref('')
+const assigningUnit = ref(false)
+const showUnitForm = ref(false)
+
+// Assignment history
+const assignmentHistory = ref<AssignmentEntry[]>([])
+const loadingHistory = ref(false)
+const showAllHistory = ref(false)
+
+// Return modal
+const showReturnDialog = ref(false)
+const returnUnitStatus = ref('available')
+const completingTransaction = ref(false)
+
+// Confirmation modals for critical operations
+const showConfirmPaymentModal = ref(false)
+const showMarkActiveModal = ref(false)
+const showCompleteModal = ref(false)
 
 const REJECT_REASONS = [
   { value: '', label: 'Select a reason...' },
@@ -182,6 +224,7 @@ async function confirmPayment() {
   processing.value = true
   try {
     await api.post(`/bookings/${booking.value.id}/confirm/`)
+    showConfirmPaymentModal.value = false
     await fetchBooking()
   } finally { processing.value = false }
 }
@@ -191,17 +234,67 @@ async function markActive() {
   processing.value = true
   try {
     await api.post(`/bookings/${booking.value.id}/mark-active/`)
+    showMarkActiveModal.value = false
     await fetchBooking()
   } finally { processing.value = false }
 }
 
 async function completeTransaction() {
   if (!booking.value) return
-  processing.value = true
+  const status = returnUnitStatus.value || 'available'
+  if (!['available', 'maintenance', 'inactive'].includes(status)) return
+  completingTransaction.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/mark-complete/`)
+    await api.post(`/bookings/${booking.value.id}/mark-complete/`, { return_unit_status: status })
     await fetchBooking()
-  } finally { processing.value = false }
+    showReturnDialog.value = false
+  } finally { completingTransaction.value = false }
+}
+
+// ── Unit Assignment ──
+
+async function loadAvailableUnits() {
+  if (!booking.value) return
+  loadingUnits.value = true
+  showUnitForm.value = true
+  try {
+    const response = await api.get(`/vehicles/${booking.value.vehicle}/units/`)
+    // DRF pagination wraps results in { count, results, ... }
+    const data = Array.isArray(response.data) ? response.data : (response.data.results || [])
+    availableUnits.value = (data as UnitOption[]).filter(u => u.status === 'available')
+  } catch { availableUnits.value = [] }
+  finally { loadingUnits.value = false }
+}
+
+async function assignUnit() {
+  if (!booking.value || !selectedUnitId.value) return
+  assigningUnit.value = true
+  try {
+    await api.post(`/bookings/${booking.value.id}/assign-unit/`, {
+      unit_id: selectedUnitId.value,
+      reason: assignmentReason.value || 'Admin assignment',
+    })
+    selectedUnitId.value = null
+    assignmentReason.value = ''
+    showUnitForm.value = false
+    availableUnits.value = []
+    await fetchBooking()
+  } finally { assigningUnit.value = false }
+}
+
+async function loadAssignmentHistory() {
+  if (!booking.value) return
+  loadingHistory.value = true
+  try {
+    const response = await api.get(`/bookings/${booking.value.id}/assignment-history/`)
+    assignmentHistory.value = response.data as AssignmentEntry[]
+  } catch { assignmentHistory.value = [] }
+  finally { loadingHistory.value = false }
+}
+
+function openReturnDialog() {
+  returnUnitStatus.value = booking.value?.return_unit_status || 'available'
+  showReturnDialog.value = true
 }
 
 async function fetchBooking() {
@@ -211,6 +304,7 @@ async function fetchBooking() {
       error.value = 'Not authorized.'
     } else {
       booking.value = response.data
+      await loadAssignmentHistory()
     }
   } catch {
     error.value = 'Booking not found.'
@@ -472,31 +566,78 @@ onMounted(fetchBooking)
                 <Button
                   class="w-full"
                   :disabled="processing"
-                  @click="confirmPayment"
+                  @click="showConfirmPaymentModal = true"
                 >
                   {{ processing ? '...' : 'Confirm Payment' }}
                 </Button>
               </template>
 
-              <!-- Confirmed: Mark Active -->
-              <template v-else-if="booking.status === 'confirmed'">
+              <!-- Confirmed / Waiting for Pickup: Assign Unit + Mark Active -->
+              <template v-else-if="booking.status === 'confirmed' || booking.status === 'waiting_for_pickup'">
+                <!-- Unit Assignment -->
+                <div class="p-3 rounded-md bg-zinc-50 border border-zinc-100 space-y-2">
+                  <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                    <Truck class="h-3.5 w-3.5" /> Assigned Unit
+                  </p>
+                  <p v-if="booking.vehicle_unit_plate" class="text-sm font-mono font-semibold text-zinc-900">
+                    {{ booking.vehicle_unit_plate }}
+                    <span class="text-xs text-zinc-400 font-normal ml-1">({{ booking.vehicle_unit_status }})</span>
+                  </p>
+                  <p v-else class="text-xs text-zinc-400">No unit assigned</p>
+
+                  <Button variant="ghost" size="sm" class="w-full text-xs" @click="loadAvailableUnits">
+                    {{ loadingUnits ? 'Loading...' : (booking.vehicle_unit_plate ? 'Change Unit' : 'Assign Unit') }}
+                  </Button>
+
+                  <!-- Unit selector (shown after clicking Assign/Change) -->
+                  <div v-if="showUnitForm && !loadingUnits && availableUnits.length > 0" class="space-y-2 pt-2 border-t border-zinc-200">
+                    <select v-model="selectedUnitId" class="w-full rounded border border-zinc-300 text-xs p-2">
+                      <option :value="null" disabled>Select a unit...</option>
+                      <option v-for="u in availableUnits" :key="u.id" :value="u.id">{{ u.plate_number }}</option>
+                    </select>
+                    <input v-model="assignmentReason" type="text" placeholder="Reason (optional)" class="w-full rounded border border-zinc-300 text-xs p-2" />
+                    <div class="flex gap-2">
+                      <Button variant="ghost" size="sm" class="flex-1 text-xs" @click="showUnitForm = false">Cancel</Button>
+                      <Button size="sm" class="flex-1" :disabled="!selectedUnitId || assigningUnit" @click="assignUnit">
+                        {{ assigningUnit ? 'Assigning...' : 'Assign' }}
+                      </Button>
+                    </div>
+                  </div>
+                  <p v-else-if="showUnitForm && !loadingUnits && availableUnits.length === 0" class="text-xs text-amber-600">
+                    No available units for this vehicle.
+                    <button class="underline ml-1" @click="showUnitForm = false">Close</button>
+                  </p>
+                </div>
+
+                <!-- Mark Active -->
                 <Button
                   class="w-full"
-                  :disabled="processing"
-                  @click="markActive"
+                  :disabled="processing || !booking.vehicle_unit"
+                  @click="showMarkActiveModal = true"
                 >
-                  {{ processing ? '...' : 'Mark as Active' }}
+                  {{ processing ? '...' : 'Mark as Active (Pickup)' }}
                 </Button>
+                <p v-if="!booking.vehicle_unit" class="text-xs text-zinc-400 text-center">Assign a vehicle unit before activating</p>
               </template>
 
-              <!-- Active: Complete -->
-              <template v-else-if="booking.status === 'active'">
+              <!-- Persisted unit info for active/completed (read-only) -->
+              <div v-if="booking.vehicle_unit_plate && (booking.status === 'active' || booking.status === 'completed')" class="p-3 rounded-md bg-zinc-50 border border-zinc-100 space-y-1">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <Truck class="h-3.5 w-3.5" /> Assigned Unit
+                </p>
+                <p class="text-sm font-mono font-semibold text-zinc-900">
+                  {{ booking.vehicle_unit_plate }}
+                  <span class="text-xs text-zinc-400 font-normal ml-1">({{ booking.vehicle_unit_status }})</span>
+                </p>
+              </div>
+
+              <!-- Active: Complete (with return status) -->
+              <template v-if="booking.status === 'active'">
                 <Button
                   class="w-full"
-                  :disabled="processing"
-                  @click="completeTransaction"
+                  @click="showCompleteModal = true"
                 >
-                  {{ processing ? '...' : 'Complete Transaction' }}
+                  Complete Transaction
                 </Button>
               </template>
 
@@ -521,6 +662,31 @@ onMounted(fetchBooking)
                   <p class="text-xs text-zinc-500 font-medium">Cancelled by Customer</p>
                 </div>
               </template>
+
+              <!-- Assignment History (available in all statuses) -->
+              <div v-if="assignmentHistory.length > 0" class="pt-4 border-t border-zinc-100">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <RefreshCw class="h-3.5 w-3.5" /> Unit Assignment History
+                </p>
+                <div class="space-y-2" :class="{ 'max-h-40 overflow-y-auto': !showAllHistory && assignmentHistory.length > 5 }">
+                  <div v-for="entry in (showAllHistory ? assignmentHistory : assignmentHistory.slice(0, 5))" :key="entry.id" class="text-xs p-2 rounded bg-zinc-50 border border-zinc-100">
+                    <p class="text-zinc-700">
+                      <span v-if="entry.previous_plate" class="text-zinc-400 line-through">{{ entry.previous_plate }}</span>
+                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">→</span>
+                      <span class="font-mono font-medium text-zinc-900">{{ entry.new_plate }}</span>
+                    </p>
+                    <p class="text-zinc-400 mt-0.5">{{ entry.reason }}</p>
+                    <p class="text-zinc-400">{{ entry.changed_by_name }} · {{ formatDateTime(entry.created_at) }}</p>
+                  </div>
+                  <button
+                    v-if="assignmentHistory.length > 5"
+                    class="text-xs text-blue-600 hover:text-blue-800 mt-2 w-full text-center"
+                    @click="showAllHistory = !showAllHistory"
+                  >
+                    {{ showAllHistory ? 'Show less' : `Show all (${assignmentHistory.length} entries)` }}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -598,6 +764,169 @@ onMounted(fetchBooking)
               @click="rejectBooking"
             >
               {{ processing ? 'Rejecting...' : 'Yes, Reject' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Confirm Payment Modal -->
+    <Teleport to="body">
+      <div v-if="showConfirmPaymentModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showConfirmPaymentModal = false" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <CreditCard class="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-zinc-900">Confirm Payment</h3>
+              <p class="text-xs text-amber-600 font-medium">Critical action — please review</p>
+            </div>
+          </div>
+
+          <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Customer</span>
+              <span class="font-medium text-zinc-900">{{ booking?.customer_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Vehicle</span>
+              <span class="font-medium text-zinc-900">{{ booking?.vehicle_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Total</span>
+              <span class="font-semibold text-zinc-900">₱{{ Number(booking?.estimated_total || 0).toLocaleString('en-PH') }}</span>
+            </div>
+          </div>
+
+          <p class="text-xs text-zinc-500">
+            This will confirm the customer's payment and finalize the booking. Only proceed if the payment has been verified.
+          </p>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showConfirmPaymentModal = false" :disabled="processing">Cancel</Button>
+            <Button class="flex-1 bg-amber-600 hover:bg-amber-700 text-white" :disabled="processing" @click="confirmPayment">
+              {{ processing ? 'Confirming...' : 'Yes, Confirm Payment' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Mark Active Modal -->
+    <Teleport to="body">
+      <div v-if="showMarkActiveModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showMarkActiveModal = false" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Car class="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-zinc-900">Mark as Active (Pickup)</h3>
+              <p class="text-xs text-blue-600 font-medium">Critical action — please review</p>
+            </div>
+          </div>
+
+          <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Customer</span>
+              <span class="font-medium text-zinc-900">{{ booking?.customer_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Vehicle</span>
+              <span class="font-medium text-zinc-900">{{ booking?.vehicle_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Assigned Unit</span>
+              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || '—' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Pickup Date</span>
+              <span class="font-medium text-zinc-900">{{ formatDate(booking?.pickup_date || '') }}</span>
+            </div>
+          </div>
+
+          <p class="text-xs text-zinc-500">
+            This confirms the vehicle has been picked up and marks the rental as active. Verify the customer's identity and the vehicle condition before proceeding.
+          </p>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showMarkActiveModal = false" :disabled="processing">Cancel</Button>
+            <Button class="flex-1 bg-blue-600 hover:bg-blue-700 text-white" :disabled="processing" @click="markActive">
+              {{ processing ? 'Activating...' : 'Yes, Mark as Active' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Complete Transaction Modal -->
+    <Teleport to="body">
+      <div v-if="showCompleteModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showCompleteModal = false" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle class="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-zinc-900">Complete Transaction</h3>
+              <p class="text-xs text-emerald-600 font-medium">Final step — please review</p>
+            </div>
+          </div>
+
+          <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Customer</span>
+              <span class="font-medium text-zinc-900">{{ booking?.customer_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Vehicle</span>
+              <span class="font-medium text-zinc-900">{{ booking?.vehicle_name }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-zinc-500">Unit</span>
+              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || '—' }}</span>
+            </div>
+          </div>
+
+          <p class="text-xs text-zinc-500">
+            This marks the transaction as complete and returns the vehicle to the fleet. Ensure the vehicle has been returned and inspected before proceeding.
+          </p>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showCompleteModal = false">Cancel</Button>
+            <Button class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" @click="openReturnDialog(); showCompleteModal = false">
+              Continue to Return
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Return Dialog -->
+    <Teleport to="body">
+      <div v-if="showReturnDialog" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showReturnDialog = false" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+          <h3 class="text-lg font-semibold text-zinc-900">Complete Transaction</h3>
+          <p class="text-sm text-zinc-500">Select the post-return status of the vehicle unit.</p>
+
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-zinc-700">Vehicle Status After Return</label>
+            <select v-model="returnUnitStatus" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm">
+              <option value="available">Available</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showReturnDialog = false">Cancel</Button>
+            <Button class="flex-1" :disabled="completingTransaction" @click="completeTransaction">
+              {{ completingTransaction ? 'Completing...' : 'Complete Transaction' }}
             </Button>
           </div>
         </div>

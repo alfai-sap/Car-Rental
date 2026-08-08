@@ -97,6 +97,7 @@ class RegisterView(views.APIView):
 
 class LoginView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'login'
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -286,55 +287,50 @@ class LogoutView(views.APIView):
 
 
 class NotificationsView(views.APIView):
-    """Return the customer's recent booking activity as a notification feed."""
+    """Return real in-app notifications for the current user."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.bookings.models import Booking
+        from apps.core.models import Notification
 
-        bookings = Booking.objects.filter(
-            customer=request.user,
-        ).select_related('vehicle').order_by('-updated_at')[:50]
+        qs = Notification.objects.filter(user=request.user).order_by('-created_at')[:50]
 
-        notifications = []
-        for b in bookings:
-            item = {
-                'id': b.id,
-                'booking_number': b.booking_number,
-                'vehicle_name': f"{b.vehicle.year} {b.vehicle.make} {b.vehicle.model}",
-                'status': b.status,
-                'status_display': b.get_status_display(),
-                'message': _notification_message(b),
-                'timestamp': b.updated_at,
-                'pickup_date': b.pickup_date,
-                'return_date': b.return_date,
-            }
-            notifications.append(item)
+        data = []
+        for n in qs:
+            data.append({
+                'id': n.id,
+                'notification_type': n.notification_type,
+                'type_display': n.get_notification_type_display(),
+                'title': n.title,
+                'message': n.message,
+                'booking_id': n.booking_id,
+                'booking_number': n.booking.booking_number if n.booking else None,
+                'is_read': n.is_read,
+                'link': n.link,
+                'created_at': n.created_at,
+            })
+
+        unread_count = qs.filter(is_read=False).count()
 
         return Response({
-            'count': len(notifications),
-            'notifications': notifications,
+            'count': len(data),
+            'unread_count': unread_count,
+            'notifications': data,
         })
 
+    def post(self, request):
+        """Mark notification(s) as read."""
+        from apps.core.models import Notification
 
-def _notification_message(booking):
-    status = booking.status
-    vehicle = f"{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}"
-    if status == 'pending_approval':
-        return f"Your booking for {vehicle} is pending owner approval."
-    elif status == 'awaiting_payment':
-        return f"Your booking for {vehicle} has been approved. Please complete payment."
-    elif status == 'confirmed':
-        return f"Payment confirmed! Your {vehicle} booking is finalized."
-    elif status == 'waiting_for_pickup':
-        return f"Your {vehicle} is ready — awaiting pickup on {booking.pickup_date}."
-    elif status == 'active':
-        return f"Your rental of {vehicle} is now active."
-    elif status == 'completed':
-        return f"Your rental of {vehicle} has been completed."
-    elif status == 'cancelled':
-        return f"Your booking for {vehicle} has been cancelled."
-    elif status == 'rejected':
-        reason = f": {booking.rejection_reason}" if booking.rejection_reason else ""
-        return f"Your booking for {vehicle} was not approved{reason}."
-    return f"Booking {booking.booking_number} status: {booking.get_status_display()}."
+        notification_id = request.data.get('notification_id')
+        mark_all = request.data.get('mark_all', False)
+
+        qs = Notification.objects.filter(user=request.user)
+        if mark_all:
+            qs.filter(is_read=False).update(is_read=True)
+        elif notification_id:
+            qs.filter(pk=notification_id).update(is_read=True)
+        else:
+            return Response({'detail': 'Provide notification_id or mark_all=true.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'detail': 'Notifications updated.'})

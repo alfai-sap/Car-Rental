@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { User, Bell } from 'lucide-vue-next'
+import { User } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
+import api from '@/services/api'
 
 const auth = useAuthStore()
 const router = useRouter()
 const dropdownOpen = ref(false)
+const unreadNotifications = ref(0)
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
@@ -23,11 +25,21 @@ async function handleLogout() {
   router.push({ name: 'home' })
 }
 
+async function fetchUnreadCount() {
+  if (!auth.isAuthenticated) return
+  try {
+    const response = await api.get('/notifications/')
+    unreadNotifications.value = response.data.unread_count || 0
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   const token = localStorage.getItem('access_token')
   if (token && !auth.user) {
     await auth.fetchUser()
   }
+  await fetchUnreadCount()
+  setInterval(fetchUnreadCount, 60000)
 })
 </script>
 
@@ -48,11 +60,18 @@ onMounted(async () => {
         <div v-if="auth.isAuthenticated && auth.user" class="relative">
           <button
             @click="toggleDropdown"
-            class="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-zinc-200 focus:outline-none transition"
+            class="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-zinc-200 focus:outline-none transition relative"
           >
             <div class="h-9 w-9 rounded-full bg-zinc-800 flex items-center justify-center">
               <User class="h-4 w-4 text-white" />
             </div>
+            <!-- Unread notification badge -->
+            <span
+              v-if="unreadNotifications > 0"
+              class="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+            >
+              {{ unreadNotifications > 99 ? '99+' : unreadNotifications }}
+            </span>
           </button>
 
           <!-- Dropdown -->
@@ -83,6 +102,16 @@ onMounted(async () => {
                 >
                   Manage Vehicles
                 </RouterLink>
+                <RouterLink
+                  to="/notifications"
+                  class="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  <span>Notifications</span>
+                  <span v-if="unreadNotifications > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {{ unreadNotifications }}
+                  </span>
+                </RouterLink>
                 <button
                   @click="handleLogout()"
                   class="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
@@ -100,10 +129,13 @@ onMounted(async () => {
                 </RouterLink>
                 <RouterLink
                   to="/notifications"
-                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  class="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
                   @click="closeDropdown"
                 >
-                  Notifications
+                  <span>Notifications</span>
+                  <span v-if="unreadNotifications > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {{ unreadNotifications }}
+                  </span>
                 </RouterLink>
                 <RouterLink
                   to="/profile"

@@ -28,6 +28,8 @@ interface Vehicle {
   status: string
   description: string
   images: VehicleImage[]
+  total_units: number
+  available_units: number
 }
 
 const route = useRoute()
@@ -254,6 +256,14 @@ onMounted(async () => {
                 </div>
               </div>
               <p class="text-xs text-zinc-500 mt-3">Free cancellation up to 24 hours before pickup</p>
+            </div>
+
+            <!-- Unit Availability -->
+            <div class="rounded-md bg-zinc-50 border border-zinc-100 p-3">
+              <p class="text-xs text-zinc-500 mb-1">Availability</p>
+              <p class="text-sm font-medium text-zinc-900">
+                {{ vehicle.available_units }} of {{ vehicle.total_units }} available
+              </p>
             </div>
 
             <!-- Existing booking -->

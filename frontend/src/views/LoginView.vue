@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useRouter, RouterLink } from 'vue-router'
+import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { Eye, EyeOff } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
@@ -10,6 +10,7 @@ import Label from '@/components/ui/Label.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const email = ref('')
 const password = ref('')
@@ -22,7 +23,8 @@ async function handleLogin() {
   error.value = ''
   try {
     await auth.login(email.value, password.value)
-    router.push('/')
+    const redirect = (route.query.redirect as string) || '/'
+    router.push(redirect)
   } catch (err: unknown) {
     const response = (err as { response?: { data?: { detail?: string; email?: string[]; password?: string[] } } })?.response
     const data = response?.data

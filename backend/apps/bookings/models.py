@@ -47,6 +47,12 @@ class Booking(models.Model):
     rejection_reason = models.TextField(blank=True)
     cancellation_reason = models.TextField(blank=True)
     handover_time = models.DateTimeField(null=True, blank=True)
+    return_time_actual = models.DateTimeField(null=True, blank=True)
+    return_unit_status = models.CharField(
+        max_length=20, blank=True,
+        help_text='Post-return status of the vehicle unit (available/maintenance/inactive). '
+                   'Must be recorded before completing the transaction.',
+    )
     # Identity snapshot — immutable record of customer identity at booking time
     identity_snapshot = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -72,3 +78,32 @@ class Booking(models.Model):
     @staticmethod
     def _generate_booking_number():
         return f"BK-{uuid.uuid4().hex[:8].upper()}"
+
+
+class AssignmentHistory(models.Model):
+    """Immutable log of every vehicle unit assignment change for a booking."""
+    booking = models.ForeignKey(
+        Booking, on_delete=models.CASCADE, related_name='assignment_history',
+    )
+    previous_unit = models.ForeignKey(
+        'vehicles.VehicleUnit', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='previous_assignments',
+    )
+    new_unit = models.ForeignKey(
+        'vehicles.VehicleUnit', on_delete=models.PROTECT, related_name='new_assignments',
+    )
+    reason = models.CharField(max_length=255)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='unit_assignments',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Assignment histories'
+
+    def __str__(self):
+        prev = self.previous_unit.plate_number if self.previous_unit else 'None'
+        new = self.new_unit.plate_number
+        return f"Booking {self.booking.booking_number}: {prev} → {new} ({self.reason})"

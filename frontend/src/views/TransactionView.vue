@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   ChevronLeft, Check, Clock, XCircle, AlertCircle,
-  CreditCard, Car, CheckCircle, Calendar,
+  CreditCard, Car, CheckCircle, Calendar, RefreshCw,
 } from 'lucide-vue-next'
 
 interface IdentityDoc {
@@ -24,6 +24,15 @@ interface VehicleImage {
   is_primary: boolean
 }
 
+interface AssignmentEntry {
+  id: number
+  previous_plate: string | null
+  new_plate: string
+  reason: string
+  changed_by_name: string
+  created_at: string
+}
+
 interface Booking {
   id: number
   booking_number: string
@@ -35,6 +44,10 @@ interface Booking {
   vehicle: number
   vehicle_name: string
   vehicle_images: VehicleImage[]
+  vehicle_unit: number | null
+  vehicle_unit_plate: string | null
+  vehicle_unit_status: string | null
+  assigned_by: string | null
   pickup_date: string
   return_date: string
   pickup_time: string
@@ -46,6 +59,7 @@ interface Booking {
   status_display: string
   special_request: string
   rejection_reason: string
+  return_unit_status: string
   created_at: string
   updated_at: string
 }
@@ -60,6 +74,21 @@ const cancelling = ref(false)
 const paying = ref(false)
 const paymentNotice = ref('')
 const lightboxImage = ref('')
+
+// Assignment history for customer
+const assignmentHistory = ref<AssignmentEntry[]>([])
+const loadingHistory = ref(false)
+const showAllHistory = ref(false)
+
+async function loadAssignmentHistory() {
+  if (!booking.value) return
+  loadingHistory.value = true
+  try {
+    const response = await api.get(`/bookings/${booking.value.id}/assignment-history/`)
+    assignmentHistory.value = response.data as AssignmentEntry[]
+  } catch { assignmentHistory.value = [] }
+  finally { loadingHistory.value = false }
+}
 
 // ── Cancel modal state ──
 const showCancelModal = ref(false)
@@ -185,6 +214,7 @@ async function fetchBooking() {
       error.value = 'Not authorized.'
       booking.value = null
     }
+    await loadAssignmentHistory()
   } catch { error.value = 'Booking not found.' }
   finally { loading.value = false }
 }
@@ -284,6 +314,12 @@ onMounted(fetchBooking)
                 </div>
                 <p class="text-sm font-medium text-zinc-900 mt-2">{{ booking.vehicle_name }}</p>
               </div>
+              <!-- Assigned Unit -->
+              <div v-if="booking.vehicle_unit_plate" class="p-3 rounded-md bg-zinc-50 border border-zinc-100 mt-3 mb-3">
+                <p class="text-xs text-zinc-400 mb-1">Assigned Vehicle</p>
+                <p class="text-sm font-mono font-semibold text-zinc-900">{{ booking.vehicle_unit_plate }}</p>
+                <p v-if="booking.assigned_by" class="text-xs text-zinc-500 mt-1">Assigned by: {{ booking.assigned_by }}</p>
+              </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="flex items-start gap-2"><Calendar class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" /><div><p class="text-xs text-zinc-500">Pickup</p><p class="text-sm font-medium text-zinc-900">{{ formatDate(booking.pickup_date) }}</p><p class="text-xs text-zinc-400">{{ formatTime(booking.pickup_time) }}</p></div></div>
                 <div class="flex items-start gap-2"><Calendar class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" /><div><p class="text-xs text-zinc-500">Return</p><p class="text-sm font-medium text-zinc-900">{{ formatDate(booking.return_date) }}</p><p class="text-xs text-zinc-400">{{ formatTime(booking.return_time) }}</p></div></div>
@@ -319,6 +355,45 @@ onMounted(fetchBooking)
               <p v-if="paymentNotice" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 {{ paymentNotice }}
               </p>
+
+              <!-- Message: admin will assign unit after payment -->
+              <div v-if="booking.status === 'confirmed'" class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+                <p class="text-xs text-blue-700">
+                  <span class="font-medium">Payment confirmed!</span> An administrator will assign a specific vehicle unit to your booking before your pickup date. You'll be notified once a unit is assigned.
+                </p>
+              </div>
+
+              <!-- Assigned unit info (shown when assigned) -->
+              <div v-if="booking.vehicle_unit_plate" class="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2">
+                <p class="text-xs text-emerald-700">
+                  <span class="font-medium">Vehicle assigned:</span> {{ booking.vehicle_unit_plate }}
+                </p>
+              </div>
+
+              <!-- Unit history for customer -->
+              <div v-if="assignmentHistory.length > 0" class="pt-2 border-t border-zinc-100">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <RefreshCw class="h-3.5 w-3.5" /> Unit Assignment History
+                </p>
+                <div class="space-y-2" :class="{ 'max-h-40 overflow-y-auto': !showAllHistory && assignmentHistory.length > 5 }">
+                  <div v-for="entry in (showAllHistory ? assignmentHistory : assignmentHistory.slice(0, 5))" :key="entry.id" class="text-xs p-2 rounded bg-zinc-50 border border-zinc-100">
+                    <p class="text-zinc-700">
+                      <span v-if="entry.previous_plate" class="text-zinc-400 line-through">{{ entry.previous_plate }}</span>
+                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">→</span>
+                      <span class="font-mono font-medium text-zinc-900">{{ entry.new_plate }}</span>
+                    </p>
+                    <p class="text-zinc-400 mt-0.5">{{ entry.reason }}</p>
+                    <p class="text-zinc-400">{{ entry.changed_by_name }} · {{ formatDateTime(entry.created_at) }}</p>
+                  </div>
+                  <button
+                    v-if="assignmentHistory.length > 5"
+                    class="text-xs text-blue-600 hover:text-blue-800 mt-2 w-full text-center"
+                    @click="showAllHistory = !showAllHistory"
+                  >
+                    {{ showAllHistory ? 'Show less' : `Show all (${assignmentHistory.length} entries)` }}
+                  </button>
+                </div>
+              </div>
               <Button v-if="canCancel" variant="ghost" class="w-full text-red-600 hover:bg-red-50" :disabled="cancelling" @click="openCancelModal">{{ cancelling ? 'Cancelling...' : 'Cancel Request' }}</Button>
               <div v-if="booking.status === 'completed'" class="text-center"><CheckCircle class="h-8 w-8 text-green-500 mx-auto mb-2" /><p class="text-xs text-green-700 font-medium">Rental Complete</p></div>
             </div>

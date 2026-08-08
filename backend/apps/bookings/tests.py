@@ -142,8 +142,11 @@ class BookingAPITests(TestCase):
         self.assertEqual(response.data['rental_days'], 4)
         # Verify identity snapshot was captured
         self.assertIn('customer_email', response.data['identity_snapshot'])
-        # Verify email was sent
-        self.assertEqual(len(mail.outbox), 1)
+        # Verify notification was created
+        from apps.core.models import Notification
+        self.assertTrue(Notification.objects.filter(
+            user=self.customer, notification_type='booking_submitted',
+        ).exists())
 
     def test_create_booking_no_drivers_license_fails(self):
         cust2 = _create_verified_customer('nolicense@test.com')
@@ -171,7 +174,7 @@ class BookingAPITests(TestCase):
     def test_create_booking_overlapping_approved_booking_fails(self):
         # Create vehicle with only 1 unit
         v = Vehicle.objects.create(make='Mazda', model='3', year=2024, type='Sedan', price_per_day=2000.00)
-        _add_vehicle_unit(v, 'MZD-001')
+        unit = _add_vehicle_unit(v, 'MZD-001')
         cust2 = _create_verified_customer('mazda@test.com')
         _add_drivers_license(cust2)
 
@@ -181,9 +184,13 @@ class BookingAPITests(TestCase):
         first = self.client.post('/api/bookings/', payload, format='json')
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
 
-        # Admin approves → reserves the only unit
+        # Admin approves
         self._login('admin@test.com', 'AdminPass123!')
         self.client.post(f'/api/bookings/{first.data["id"]}/approve/')
+        # Admin assigns the unit
+        self.client.post(f'/api/bookings/{first.data["id"]}/assign-unit/', {
+            'unit_id': unit.pk, 'reason': 'Test assignment',
+        })
 
         # Second booking should fail — no units left
         self._login('mazda@test.com', 'Pass123!')
@@ -268,7 +275,11 @@ class BookingAPITests(TestCase):
         response = self.client.post(f'/api/bookings/{booking_id}/approve/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'awaiting_payment')
-        self.assertEqual(len(mail.outbox), 2)  # submit + approved
+        # Verify notification was created for customer
+        from apps.core.models import Notification
+        self.assertTrue(Notification.objects.filter(
+            user=self.customer, notification_type='booking_approved',
+        ).exists())
 
     def test_admin_reject_booking(self):
         self._login('cust@test.com', 'Pass123!')

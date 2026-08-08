@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   Car, Plus, ChevronLeft, ChevronRight,
-  Search, ListFilter, ArrowUpDown, ChevronDown,
+  Search, ListFilter, ArrowUpDown, ChevronDown, X, Save, Upload,
 } from 'lucide-vue-next'
 
 interface VehicleImage {
@@ -104,6 +104,91 @@ function selectSort(key: string) {
 
 function goToPage(page: number) {
   currentPage.value = Math.max(1, Math.min(page, totalPages.value))
+}
+
+// ── Create vehicle modal ──
+const showCreateModal = ref(false)
+const creating = ref(false)
+const createError = ref('')
+const createForm = ref({
+  make: '', model: '', year: new Date().getFullYear(),
+  type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+  seats: 5, price_per_day: '', description: '',
+})
+const createImages = ref<File[]>([])
+
+function openCreateModal() {
+  createForm.value = {
+    make: '', model: '', year: new Date().getFullYear(),
+    type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+    seats: 5, price_per_day: '', description: '',
+  }
+  createImages.value = []
+  createError.value = ''
+  showCreateModal.value = true
+}
+
+function handleCreateImages(e: Event) {
+  const target = e.target as HTMLInputElement
+  if (target.files) createImages.value = Array.from(target.files)
+}
+
+async function submitCreateVehicle() {
+  creating.value = true
+  createError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('make', createForm.value.make)
+    fd.append('model', createForm.value.model)
+    fd.append('year', String(createForm.value.year))
+    fd.append('type', createForm.value.type)
+    fd.append('transmission', createForm.value.transmission)
+    fd.append('fuel', createForm.value.fuel)
+    fd.append('seats', String(createForm.value.seats))
+    fd.append('price_per_day', createForm.value.price_per_day)
+    fd.append('description', createForm.value.description)
+    for (const img of createImages.value) {
+      fd.append('uploaded_images', img)
+    }
+    await api.post('/vehicles/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    showCreateModal.value = false
+    await fetchVehicles()
+  } catch (e: any) {
+    const data = e?.response?.data
+    const status = e?.response?.status
+
+    if (status === 403) {
+      createError.value = 'You do not have permission to perform this action. Please try refreshing the page or logging in again.'
+    } else if (status === 500) {
+      createError.value = 'A server error occurred. Please try again later.'
+    } else if (typeof data === 'string' && (data.startsWith('<!DOCTYPE') || data.startsWith('<html') || data.startsWith('<!'))) {
+      createError.value = 'An unexpected error occurred. Please try again.'
+    } else if (typeof data === 'string') {
+      createError.value = data
+    } else if (data && typeof data === 'object') {
+      const messages: string[] = []
+      for (const [field, errors] of Object.entries(data)) {
+        if (Array.isArray(errors)) {
+          for (const err of errors) {
+            if (typeof err === 'string') messages.push(err)
+            else if (typeof err === 'object' && err !== null) {
+              // nested field errors like { images: [{ image: "msg" }] }
+              for (const subErrors of Object.values(err)) {
+                if (Array.isArray(subErrors)) messages.push(...subErrors.filter((v): v is string => typeof v === 'string'))
+              }
+            }
+          }
+        } else if (typeof errors === 'string') {
+          messages.push(errors)
+        }
+      }
+      createError.value = messages.length > 0 ? messages.join('. ') : 'Failed to create vehicle.'
+    } else {
+      createError.value = 'Failed to create vehicle.'
+    }
+  } finally {
+    creating.value = false
+  }
 }
 
 async function fetchVehicles() {
@@ -224,7 +309,7 @@ onMounted(fetchVehicles)
 
         <div class="flex-1" />
 
-        <Button @click="openCreateForm">
+        <Button @click="openCreateModal">
           <Plus class="h-4 w-4 mr-1" /> Add Vehicle
         </Button>
       </div>
@@ -241,7 +326,7 @@ onMounted(fetchVehicles)
         </div>
         <h2 class="text-lg font-medium text-zinc-900 mb-2">No vehicles yet</h2>
         <p class="text-sm text-zinc-500 mb-6">Add your first vehicle listing to get started.</p>
-        <Button @click="openCreateForm">Add Vehicle</Button>
+        <Button @click="openCreateModal">Add Vehicle</Button>
       </div>
 
       <template v-else>
@@ -311,5 +396,81 @@ onMounted(fetchVehicles)
         </div>
       </template>
     </main>
+
+    <!-- Create Vehicle Modal -->
+    <Teleport to="body">
+      <div v-if="showCreateModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showCreateModal = false" />
+        <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-zinc-900">Add New Vehicle</h2>
+            <button @click="showCreateModal = false" class="p-1 rounded hover:bg-zinc-100"><X class="h-5 w-5 text-zinc-400" /></button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Make</label>
+              <input v-model="createForm.make" placeholder="Toyota" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Model</label>
+              <input v-model="createForm.model" placeholder="Vios" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Year</label>
+              <input v-model.number="createForm.year" type="number" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Type</label>
+              <select v-model="createForm.type" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm">
+                <option>Sedan</option><option>SUV</option><option>Hatchback</option><option>Van</option><option>Truck</option><option>Coupe</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Transmission</label>
+              <select v-model="createForm.transmission" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm">
+                <option value="automatic">Automatic</option><option value="manual">Manual</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Fuel</label>
+              <select v-model="createForm.fuel" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm">
+                <option value="gasoline">Gasoline</option><option value="diesel">Diesel</option><option value="electric">Electric</option><option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Seats</label>
+              <input v-model.number="createForm.seats" type="number" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-zinc-700">Price per Day (₱)</label>
+              <input v-model="createForm.price_per_day" type="number" step="0.01" placeholder="1500.00" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-zinc-700">Description</label>
+            <textarea v-model="createForm.description" rows="3" placeholder="Brief description of the vehicle..." class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-zinc-700">Images</label>
+            <label class="flex items-center gap-2 h-9 px-3 rounded-md border border-dashed border-zinc-300 cursor-pointer hover:border-zinc-400 text-sm text-zinc-500">
+              <Upload class="h-4 w-4" /> {{ createImages.length ? `${createImages.length} file(s) selected` : 'Choose images...' }}
+              <input type="file" multiple accept="image/*" class="hidden" @change="handleCreateImages" />
+            </label>
+          </div>
+
+          <p v-if="createError" class="text-sm text-red-600">{{ createError }}</p>
+
+          <div class="flex gap-2 pt-2">
+            <Button variant="ghost" class="flex-1" @click="showCreateModal = false">Cancel</Button>
+            <Button class="flex-1" :disabled="creating" @click="submitCreateVehicle">
+              <Save class="h-4 w-4 mr-1" /> {{ creating ? 'Creating...' : 'Create Vehicle' }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

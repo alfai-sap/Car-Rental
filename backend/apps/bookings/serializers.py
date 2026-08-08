@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from apps.bookings.models import Booking
+from apps.bookings.models import Booking, AssignmentHistory
 from apps.vehicles.models import VehicleUnit
 
 # Statuses that occupy a VehicleUnit
@@ -16,6 +16,11 @@ class BookingSerializer(serializers.ModelSerializer):
     vehicle_images = serializers.SerializerMethodField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     identity_snapshot = serializers.SerializerMethodField(read_only=True)
+    vehicle_unit_plate = serializers.SerializerMethodField(read_only=True)
+    vehicle_unit_status = serializers.SerializerMethodField(read_only=True)
+    assigned_by = serializers.SerializerMethodField(read_only=True)
+    return_unit_status = serializers.CharField(read_only=True)
+    return_time_actual = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = Booking
@@ -23,16 +28,31 @@ class BookingSerializer(serializers.ModelSerializer):
             'id', 'booking_number', 'customer', 'customer_email', 'customer_name',
             'customer_phone', 'customer_identity_docs', 'identity_snapshot',
             'vehicle', 'vehicle_name', 'vehicle_images', 'vehicle_unit',
+            'vehicle_unit_plate', 'vehicle_unit_status', 'assigned_by',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
-            'handover_time', 'created_at', 'updated_at',
+            'handover_time', 'return_time_actual', 'return_unit_status',
+            'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'booking_number', 'customer', 'vehicle_unit', 'rental_days',
             'subtotal', 'estimated_total', 'status', 'rejection_reason',
             'cancellation_reason', 'created_at', 'updated_at', 'handover_time',
         ]
+
+    def get_vehicle_unit_plate(self, obj):
+        return obj.vehicle_unit.plate_number if obj.vehicle_unit else None
+
+    def get_vehicle_unit_status(self, obj):
+        return obj.vehicle_unit.get_status_display() if obj.vehicle_unit else None
+
+    def get_assigned_by(self, obj):
+        """Return the name of the admin who last assigned/changed the unit."""
+        last = obj.assignment_history.order_by('-created_at').first()
+        if last and last.changed_by:
+            return f"{last.changed_by.first_name} {last.changed_by.last_name}"
+        return None
 
     def get_customer_name(self, obj):
         return f"{obj.customer.first_name} {obj.customer.last_name}"
@@ -197,3 +217,35 @@ class AdminDashboardBookingSerializer(serializers.ModelSerializer):
 
     def get_vehicle_name(self, obj):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
+
+
+class AssignmentHistorySerializer(serializers.ModelSerializer):
+    previous_plate = serializers.SerializerMethodField(read_only=True)
+    new_plate = serializers.SerializerMethodField(read_only=True)
+    changed_by_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = AssignmentHistory
+        fields = [
+            'id', 'booking', 'previous_unit', 'previous_plate',
+            'new_unit', 'new_plate', 'reason', 'changed_by',
+            'changed_by_name', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_previous_plate(self, obj):
+        return obj.previous_unit.plate_number if obj.previous_unit else None
+
+    def get_new_plate(self, obj):
+        return obj.new_unit.plate_number
+
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}"
+        return None
+
+
+class UnitAssignmentSerializer(serializers.Serializer):
+    """Input serializer for unit assignment."""
+    unit_id = serializers.IntegerField(required=True)
+    reason = serializers.CharField(required=False, default='Initial assignment')

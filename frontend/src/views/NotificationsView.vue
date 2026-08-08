@@ -10,53 +10,64 @@ import {
 
 interface Notification {
   id: number
-  booking_number: string
-  vehicle_name: string
-  status: string
-  status_display: string
+  notification_type: string
+  type_display: string
+  title: string
   message: string
-  timestamp: string
-  pickup_date: string
-  return_date: string
+  booking_id: number | null
+  booking_number: string | null
+  is_read: boolean
+  link: string
+  created_at: string
 }
 
 const loading = ref(true)
 const error = ref('')
 const notifications = ref<Notification[]>([])
+const unreadCount = ref(0)
 
-function statusIcon(status: string) {
-  switch (status) {
-    case 'confirmed':
-    case 'completed':
+function notificationIcon(type: string) {
+  switch (type) {
+    case 'booking_confirmed':
+    case 'payment_successful':
+    case 'transaction_completed':
       return CheckCircle
-    case 'rejected':
+    case 'booking_rejected':
       return XCircle
-    case 'awaiting_payment':
-    case 'pending_approval':
+    case 'booking_approved':
+    case 'booking_submitted':
+    case 'payment_required':
+    case 'pickup_reminder':
       return Clock
-    case 'active':
+    case 'unit_assigned':
+    case 'unit_changed':
       return Car
-    case 'cancelled':
-      return XCircle
+    case 'rental_activated':
+      return Car
+    case 'vehicle_returned':
+      return CreditCard
     default:
       return Bell
   }
 }
 
-function statusColor(status: string): string {
-  switch (status) {
-    case 'confirmed':
-    case 'completed':
+function notificationColor(type: string): string {
+  switch (type) {
+    case 'booking_confirmed':
+    case 'payment_successful':
+    case 'transaction_completed':
       return 'text-green-600'
-    case 'rejected':
-    case 'cancelled':
+    case 'booking_rejected':
+    case 'payment_failed':
       return 'text-red-600'
-    case 'awaiting_payment':
+    case 'payment_required':
+    case 'additional_payment_required':
       return 'text-amber-600'
-    case 'active':
+    case 'rental_activated':
       return 'text-blue-600'
-    case 'pending_approval':
-      return 'text-zinc-500'
+    case 'unit_assigned':
+    case 'unit_changed':
+      return 'text-purple-600'
     default:
       return 'text-zinc-500'
   }
@@ -74,10 +85,19 @@ function formatTime(dateStr: string): string {
   })
 }
 
+async function markAllRead() {
+  try {
+    await api.post('/notifications/', { mark_all: true })
+    notifications.value.forEach(n => n.is_read = true)
+    unreadCount.value = 0
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   try {
     const response = await api.get('/notifications/')
     notifications.value = response.data.notifications
+    unreadCount.value = response.data.unread_count || 0
   } catch {
     error.value = 'Failed to load notifications.'
   } finally {
@@ -91,9 +111,11 @@ onMounted(async () => {
     <Navbar />
 
     <main class="flex-1 max-w-2xl mx-auto px-4 pt-24 pb-16 w-full">
-      <div class="flex items-center gap-3 mb-8">
-        <Bell class="h-5 w-5 text-zinc-700" />
+      <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-semibold text-zinc-900">Notifications</h1>
+        <button v-if="unreadCount > 0" @click="markAllRead" class="text-xs text-blue-600 hover:text-blue-800">
+          Mark all as read ({{ unreadCount }})
+        </button>
       </div>
 
       <div v-if="loading" class="text-center py-12">
@@ -113,30 +135,48 @@ onMounted(async () => {
       </div>
 
       <div v-else class="space-y-2">
-        <RouterLink
+        <div
           v-for="notif in notifications"
           :key="notif.id"
-          :to="`/transactions/${notif.id}`"
           class="block rounded-lg border border-zinc-200 bg-white p-4 hover:border-zinc-300 transition-colors"
+          :class="{ 'border-l-4 border-l-blue-500': !notif.is_read }"
         >
-          <div class="flex items-start gap-3">
+          <RouterLink
+            v-if="notif.booking_id"
+            :to="`/transactions/${notif.booking_id}`"
+            class="block"
+          >
+            <div class="flex items-start gap-3">
+              <component
+                :is="notificationIcon(notif.notification_type)"
+                class="h-5 w-5 mt-0.5 flex-shrink-0"
+                :class="notificationColor(notif.notification_type)"
+              />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-zinc-900">{{ notif.title }}</p>
+                <p class="text-sm text-zinc-600">{{ notif.message }}</p>
+                <p class="text-xs text-zinc-400 mt-1">
+                  {{ formatDate(notif.created_at) }} at {{ formatTime(notif.created_at) }}
+                  <span v-if="notif.booking_number">· {{ notif.booking_number }}</span>
+                </p>
+              </div>
+            </div>
+          </RouterLink>
+          <div v-else class="flex items-start gap-3">
             <component
-              :is="statusIcon(notif.status)"
+              :is="notificationIcon(notif.notification_type)"
               class="h-5 w-5 mt-0.5 flex-shrink-0"
-              :class="statusColor(notif.status)"
+              :class="notificationColor(notif.notification_type)"
             />
             <div class="flex-1 min-w-0">
-              <p class="text-sm text-zinc-900">{{ notif.message }}</p>
+              <p class="text-sm font-medium text-zinc-900">{{ notif.title }}</p>
+              <p class="text-sm text-zinc-600">{{ notif.message }}</p>
               <p class="text-xs text-zinc-400 mt-1">
-                {{ formatDate(notif.timestamp) }} at {{ formatTime(notif.timestamp) }}
-                · {{ notif.booking_number }}
+                {{ formatDate(notif.created_at) }} at {{ formatTime(notif.created_at) }}
               </p>
             </div>
-            <span class="text-xs text-zinc-400 flex-shrink-0">
-              {{ notif.status_display }}
-            </span>
           </div>
-        </RouterLink>
+        </div>
       </div>
     </main>
   </div>

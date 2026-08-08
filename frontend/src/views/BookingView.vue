@@ -56,6 +56,8 @@ const checkingAvailability = ref(false)
 const availability = ref<{
   available: boolean
   reason?: string
+  total_units?: number
+  available_units?: number
   rental_days?: number
   price_per_day?: string
   subtotal?: string
@@ -503,7 +505,10 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
               ]"
             >
               <template v-if="checkingAvailability">Checking availability...</template>
-              <template v-else-if="availability?.available">Vehicle is available for these dates.</template>
+              <template v-else-if="availability?.available">
+                Vehicle is available for these dates.
+                <span v-if="availability.total_units">({{ availability.available_units }} of {{ availability.total_units }} available)</span>
+              </template>
               <template v-else-if="availability && !availability.available">{{ availability.reason || 'Vehicle is not available for these dates.' }}</template>
             </div>
 
