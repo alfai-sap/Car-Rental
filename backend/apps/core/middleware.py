@@ -42,8 +42,9 @@ class SecurityHeadersMiddleware:
         response['Cross-Origin-Opener-Policy'] = 'same-origin'
         response['Cross-Origin-Resource-Policy'] = 'same-origin'
 
-        # Cache control for sensitive pages (override if views set their own)
-        if not response.has_header('Cache-Control'):
+        # Cache control for API responses only — prevents caching of sensitive data
+        # while allowing browsers to cache static assets normally.
+        if request.path.startswith('/api/') and not response.has_header('Cache-Control'):
             response['Cache-Control'] = 'no-store, max-age=0'
 
         return response

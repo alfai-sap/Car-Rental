@@ -5,7 +5,19 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,  // send httpOnly refresh cookie
 })
+
+// ── Access token — stored in memory (Pinia), never in localStorage ──
+let accessToken: string | null = null
+
+export function setAccessToken(token: string | null) {
+  accessToken = token
+}
+
+export function getAccessToken(): string | null {
+  return accessToken
+}
 
 let isRefreshing = false
 let failedQueue: Array<{
@@ -25,9 +37,8 @@ function processQueue(error: unknown, token: string | null) {
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`
   }
   return config
 })
@@ -41,8 +52,7 @@ api.interceptors.response.use(
       // Don't attempt refresh on auth endpoints themselves
       const isAuthEndpoint = originalRequest.url?.includes('/auth/')
       if (isAuthEndpoint && !originalRequest.url?.includes('/auth/token/refresh/')) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        accessToken = null
         return Promise.reject(error)
       }
 
@@ -58,19 +68,15 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) {
-        isRefreshing = false
-        localStorage.removeItem('access_token')
-        return Promise.reject(error)
-      }
-
       try {
-        const response = await axios.post('/api/auth/token/refresh/', {
-          refresh: refreshToken,
-        })
+        // Refresh token is sent as httpOnly cookie automatically
+        const response = await axios.post(
+          '/api/auth/token/refresh/',
+          {},
+          { withCredentials: true },
+        )
         const newAccess = response.data.access
-        localStorage.setItem('access_token', newAccess)
+        accessToken = newAccess
 
         processQueue(null, newAccess)
 
@@ -78,8 +84,7 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        accessToken = null
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

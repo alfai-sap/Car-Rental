@@ -75,13 +75,13 @@ const router = createRouter({
       path: '/admin/transactions/:id',
       name: 'admin-transaction',
       component: () => import('@/views/AdminTransactionView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresStaff: true },
     },
     {
       path: '/admin/dashboard',
       name: 'admin-dashboard',
       component: () => import('@/views/AdminDashboardView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresStaff: true },
     },
     {
       path: '/admin/login',
@@ -93,13 +93,13 @@ const router = createRouter({
       path: '/admin/vehicles',
       name: 'admin-vehicles',
       component: () => import('@/views/AdminVehiclesView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresStaff: true },
     },
     {
       path: '/admin/vehicles/:id',
       name: 'admin-vehicle-detail',
       component: () => import('@/views/AdminVehicleDetailView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresStaff: true },
     },
     {
       path: '/notifications',
@@ -111,20 +111,22 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, _from, next) => {
-  // Attempt to restore user from existing token
-  const token = localStorage.getItem('access_token')
   const auth = useAuthStore()
 
-  if (token && !auth.user) {
+  // Attempt to restore user session via httpOnly refresh cookie
+  if (!auth.user) {
     try {
       await auth.fetchUser()
     } catch {
-      // token invalid — clear and proceed
+      // Not authenticated — proceed as guest
     }
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if (to.meta.requiresStaff && !auth.user?.is_staff) {
+    // Non-staff user trying to access admin-only pages
+    next({ name: 'home' })
   } else if (to.meta.guestOnly && auth.isAuthenticated) {
     if (auth.user?.is_staff) {
       next({ name: 'admin-dashboard' })
@@ -132,7 +134,6 @@ router.beforeEach(async (to, _from, next) => {
       next({ name: 'home' })
     }
   } else if (auth.isAuthenticated && auth.user?.is_staff) {
-    // Staff users can only access admin pages and vehicle browsing
     if (to.name === 'home') {
       next({ name: 'admin-dashboard' })
     } else if (to.name === 'vehicle-book' || to.name === 'customer-dashboard' || to.name === 'profile') {

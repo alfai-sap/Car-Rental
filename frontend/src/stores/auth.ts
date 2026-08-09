@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import api from '@/services/api'
+import api, { setAccessToken } from '@/services/api'
 
 interface User {
   id: number
@@ -18,15 +18,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = ref(false)
   const unreadNotificationCount = ref(0)
 
-  function setTokens(access: string, refresh: string) {
-    localStorage.setItem('access_token', access)
-    localStorage.setItem('refresh_token', refresh)
+  function setAuth(access: string, userData: User) {
+    setAccessToken(access)
+    user.value = userData
     isAuthenticated.value = true
   }
 
-  function clearTokens() {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+  function clearAuth() {
+    setAccessToken(null)
     user.value = null
     isAuthenticated.value = false
     unreadNotificationCount.value = 0
@@ -47,14 +46,13 @@ export const useAuthStore = defineStore('auth', () => {
       isAuthenticated.value = true
       await fetchUnreadCount()
     } catch {
-      clearTokens()
+      clearAuth()
     }
   }
 
   async function login(email: string, password: string) {
     const response = await api.post('/auth/login/', { email, password })
-    setTokens(response.data.access, response.data.refresh)
-    user.value = response.data.user
+    setAuth(response.data.access, response.data.user)
     await fetchUnreadCount()
   }
 
@@ -80,15 +78,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    const refresh = localStorage.getItem('refresh_token')
-    if (refresh) {
-      try {
-        await api.post('/auth/logout/', { refresh })
-      } catch {
-        // proceed with client-side cleanup regardless
-      }
+    try {
+      await api.post('/auth/logout/', {})
+    } catch {
+      // proceed with client-side cleanup regardless
     }
-    clearTokens()
+    clearAuth()
   }
 
   return { user, isAuthenticated, unreadNotificationCount, login, register, verifyEmail, resendVerification, logout, fetchUser, fetchUnreadCount }

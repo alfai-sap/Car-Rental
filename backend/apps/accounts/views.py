@@ -50,8 +50,21 @@ def get_tokens_for_user(user):
     }
 
 
+def _set_refresh_cookie(response, refresh_token):
+    """Set the refresh token as an httpOnly, secure, SameSite cookie."""
+    response.set_cookie(
+        key='refresh_token',
+        value=refresh_token,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite='Lax',
+        max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds(),
+        path='/api/auth/',  # only sent to auth endpoints
+    )
+
+
 def send_verification_email(user):
-    token = account_token_generator.make_token(user)
+    token = account_token_generator.make_email_verification_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     verify_url = f"{settings.FRONTEND_URL}/verify-email/{uid}/{token}/"
 
@@ -83,11 +96,29 @@ def send_verification_email(user):
 
 
 class RegisterView(views.APIView):
+    """Register a new user account.
+
+    To prevent user-enumeration attacks, duplicate email registrations
+    are NOT rejected with an error.  Instead the view returns the same
+    success message and sends a verification email only when the
+    account does not already exist.
+
+    An attacker cannot determine whether an email is registered by
+    observing the API response.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
+            email = serializer.validated_data['email']
+            # If the email is already taken, silently pretend success
+            # but do NOT create a duplicate account.
+            if User.objects.filter(email=email).exists():
+                return Response({
+                    'detail': 'Account created. Please check your email to verify your account.'
+                }, status=status.HTTP_201_CREATED)
+
             user = serializer.save()
             send_verification_email(user)
             return Response({
@@ -110,11 +141,24 @@ class LoginView(views.APIView):
 
         user = User.objects.filter(email=email).first()
         if user and user.check_password(password):
+            if not user.is_verified:
+                # Return the same 401 as an invalid login to prevent
+                # user-enumeration (an attacker cannot tell whether the
+                # email is registered by comparing 401 vs 403).
+                logger.info(
+                    'Login attempt for unverified account: %s', email,
+                )
+                return Response(
+                    {'detail': 'Invalid email or password.'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
             tokens = get_tokens_for_user(user)
-            return Response({
+            response = Response({
                 'user': UserSerializer(user).data,
-                **tokens,
+                'access': tokens['access'],
             })
+            _set_refresh_cookie(response, tokens['refresh'])
+            return response
         return Response({'detail': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
@@ -133,7 +177,7 @@ class VerifyEmailView(views.APIView):
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             return Response({'detail': 'Invalid verification link.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not account_token_generator.check_token(user, data['token']):
+        if not account_token_generator.check_email_verification_token(user, data['token']):
             return Response({'detail': 'Verification link has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if user.is_verified:
@@ -179,6 +223,9 @@ class IdentityDocumentUploadView(views.APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
+    # Prevent disk-abuse by limiting each user to a reasonable number of identity documents
+    MAX_IDENTITY_DOCS_PER_USER = 5
+
     def get(self, request):
         docs = IdentityDocument.objects.filter(user=request.user)
         return Response(IdentityDocumentSerializer(docs, many=True, context={'request': request}).data)
@@ -186,6 +233,14 @@ class IdentityDocumentUploadView(views.APIView):
     def post(self, request):
         if has_active_bookings(request.user):
             return Response({'detail': LOCKED_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+
+        current_count = IdentityDocument.objects.filter(user=request.user).count()
+        if current_count >= self.MAX_IDENTITY_DOCS_PER_USER:
+            return Response(
+                {'detail': f'You can upload up to {self.MAX_IDENTITY_DOCS_PER_USER} identity documents. Please delete an existing one first.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = IdentityDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save(user=request.user)
@@ -301,8 +356,64 @@ class LogoutView(views.APIView):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
         except Exception:
+            pass  # token may already be invalid — that's fine
+
+        response = Response({'detail': 'Logged out successfully.'})
+        response.delete_cookie('refresh_token', path='/api/auth/')
+        return response
+
+
+class CookieTokenRefreshView(views.APIView):
+    """Refresh the access token using the httpOnly refresh cookie.
+
+    The refresh token is read exclusively from the 'refresh_token'
+    httpOnly cookie — never from the request body.  This prevents
+    CSRF-based token theft: even if a malicious site sends a POST,
+    the browser won't attach the httpOnly cookie unless SameSite
+    allows it (and we use SameSite=Lax, which blocks cross-site POST).
+
+    A new access token is returned in the response body.  The
+    refresh cookie is rotated (blacklisted + replaced) on each call.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get('refresh_token', '')
+
+        if not refresh_token:
+            return Response(
+                {'detail': 'No refresh token provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not refresh_token:
+            return Response(
+                {'detail': 'No refresh token provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token = RefreshToken(refresh_token)
+            token.check_exp()
+        except Exception:
+            return Response(
+                {'detail': 'Refresh token is invalid or expired.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Blacklist the old token and rotate
+        try:
+            token.blacklist()
+        except Exception:
             pass
-        return Response({'detail': 'Logged out successfully.'})
+
+        # Issue new tokens
+        user = User.objects.get(pk=token['user_id'])
+        new_tokens = get_tokens_for_user(user)
+
+        response = Response({'access': new_tokens['access']})
+        _set_refresh_cookie(response, new_tokens['refresh'])
+        return response
 
 
 class NotificationsView(views.APIView):

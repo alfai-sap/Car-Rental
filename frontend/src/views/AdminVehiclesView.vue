@@ -75,7 +75,9 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredVehicles.value.l
 const sortedVehicles = computed(() => {
   const arr = [...filteredVehicles.value]
   switch (sortBy.value) {
-    case 'oldest': return arr.reverse()
+    case 'oldest':
+      // Sort by created_at ascending (oldest first)
+      return arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     case 'price_high': return arr.sort((a, b) => Number(b.price_per_day) - Number(a.price_per_day))
     case 'price_low': return arr.sort((a, b) => Number(a.price_per_day) - Number(b.price_per_day))
     default: return arr

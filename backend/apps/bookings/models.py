@@ -17,6 +17,12 @@ class Booking(models.Model):
         ('rejected', 'Rejected'),
     ]
 
+    RETURN_UNIT_STATUS_CHOICES = [
+        ('available', 'Available'),
+        ('maintenance', 'Maintenance'),
+        ('inactive', 'Inactive'),
+    ]
+
     booking_number = models.CharField(max_length=12, unique=True, editable=False)
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -49,7 +55,7 @@ class Booking(models.Model):
     handover_time = models.DateTimeField(null=True, blank=True)
     return_time_actual = models.DateTimeField(null=True, blank=True)
     return_unit_status = models.CharField(
-        max_length=20, blank=True,
+        max_length=20, choices=RETURN_UNIT_STATUS_CHOICES, blank=True,
         help_text='Post-return status of the vehicle unit (available/maintenance/inactive). '
                    'Must be recorded before completing the transaction.',
     )
@@ -67,11 +73,13 @@ class Booking(models.Model):
     def save(self, *args, **kwargs):
         if not self.booking_number:
             self.booking_number = self._generate_booking_number()
-        if not self.rental_days:
+        if self.rental_days is None or not self.rental_days:
+            if self.return_date <= self.pickup_date:
+                raise ValueError('Return date must be after pickup date.')
             self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
-        if not self.subtotal:
+        if self.subtotal is None:
             self.subtotal = self.vehicle.price_per_day * self.rental_days
-        if not self.estimated_total:
+        if self.estimated_total is None:
             self.estimated_total = self.subtotal  # deposits/taxes added in Phase 5
         super().save(*args, **kwargs)
 

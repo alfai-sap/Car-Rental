@@ -43,11 +43,11 @@ class BookingAdmin(admin.ModelAdmin):
     def approve_selected(self, request, queryset):
         count = 0
         for booking in queryset.filter(status='pending_approval'):
-            booking.status = 'approved'
+            booking.status = 'awaiting_payment'
             booking.save()
             notify.notify_booking_approved(booking)
             count += 1
-        self.message_user(request, f'{count} booking(s) approved and notified.')
+        self.message_user(request, f'{count} booking(s) approved and notified. Now awaiting payment.')
 
     @admin.action(description='Reject selected bookings')
     def reject_selected(self, request, queryset):

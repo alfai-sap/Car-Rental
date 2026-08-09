@@ -1,45 +1,100 @@
-# Python
+# ============================================
+# Environment & Secrets (NEVER commit)
+# ============================================
+.env
+.env.*
+*.env.local
+.env.production
+secrets.yml
+*.pem
+*.key
+*.crt
+
+# ============================================
+# Python / Django
+# ============================================
 __pycache__/
 *.py[cod]
+*.pyo
 *.egg-info/
+*.egg
 dist/
 build/
+*.log
+*.pot
+db.sqlite3
+*.sqlite3
+staticfiles/
 
-# Virtual Environment
+# Virtual environment
 venv/
 .venv/
+env/
+.env/
+python_env/
 
-# Environment
-.env
+# ============================================
+# User Uploads & Media
+# ============================================
+media/
+uploads/
+!media/.gitkeep
+!uploads/.gitkeep
 
-# IDE
+# ============================================
+# Node / Frontend
+# ============================================
+node_modules/
+bower_components/
+.pnpm-store/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+.vite/
+
+# ============================================
+# IDE & Editor
+# ============================================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
 
-# OS
+# ============================================
+# OS Files
+# ============================================
 .DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Database
-*.sqlite3
+# ============================================
+# Testing & Coverage
+# ============================================
+.coverage
+htmlcov/
+.coverage.*
+coverage.xml
+.hypothesis/
+.pytest_cache/
 
-# Media
-media/
-
-# Node
-node_modules/
-dist/
-frontend/dist/
-frontend/.vite/
-
+# ============================================
 # Docker
+# ============================================
+docker-compose.override.yml
 .docker/
 
-# AGENTS.md
-ProjectDescription.md
-TechStack.md
-PaymentModule.md
-BookingModule.md
-IdentityDocumentManagement.md
-BookingWorkflow.md
-VehicleManagement.md
+# ============================================
+# Debugging & Misc
+# ============================================
+debug_log.txt
+*.prof
+*.bak
+*.tmp
+*.temp

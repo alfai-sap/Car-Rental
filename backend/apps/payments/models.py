@@ -79,6 +79,10 @@ class Payment(models.Model):
     payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     paid_at = models.DateTimeField(null=True, blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
+    webhook_event_id = models.CharField(
+        max_length=100, unique=True, null=True, blank=True,
+        help_text='PayMongo event ID for idempotency — prevents double-processing of webhooks.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

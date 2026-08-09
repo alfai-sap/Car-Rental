@@ -1,4 +1,5 @@
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
@@ -6,12 +7,12 @@ from rest_framework import serializers
 from apps.accounts.models import User, IdentityDocument
 
 
-class AccountTokenGenerator:
-    """Stateless token generator for email verification and password reset.
+class EmailVerificationTokenGenerator:
+    """Stateless token generator for email verification only.
 
-    Uses Django's TimestampSigner instead of PasswordResetTokenGenerator
-    to avoid tokens becoming invalid when the user changes their password.
-    Tokens expire after the configured PASSWORD_RESET_TIMEOUT (default 5 min).
+    Uses Django's TimestampSigner so that verification tokens survive
+    password changes.  Tokens expire after PASSWORD_RESET_TIMEOUT
+    (default 5 min).
     """
     def __init__(self):
         self.signer = TimestampSigner()
@@ -27,6 +28,29 @@ class AccountTokenGenerator:
             return False
 
 
+class AccountTokenGenerator(PasswordResetTokenGenerator):
+    """Password-reset token generator that incorporates the user's password hash.
+
+    Uses Django's built-in PasswordResetTokenGenerator so that a reset
+    token automatically becomes invalid after the user changes their
+    password — preventing token-replay attacks.
+
+    Also provides a short-lived TimestampSigner for email verification,
+    where password-change invalidation is NOT desired.
+    """
+    def __init__(self):
+        super().__init__()
+        self._email_verifier = EmailVerificationTokenGenerator()
+
+    def make_email_verification_token(self, user):
+        """Short-lived token for email verification (survives password changes)."""
+        return self._email_verifier.make_token(user)
+
+    def check_email_verification_token(self, user, token):
+        """Validate an email-verification token."""
+        return self._email_verifier.check_token(user, token)
+
+
 def _get_token_timeout():
     from django.conf import settings
     return getattr(settings, 'PASSWORD_RESET_TIMEOUT', 300)
@@ -40,7 +64,7 @@ def _identity_image_token(pk):
 
     Allows <img> tags to load identity documents without Auth headers.
     """
-    return account_token_generator.signer.sign(str(pk))
+    return account_token_generator._email_verifier.signer.sign(str(pk))
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -50,10 +74,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'first_name', 'last_name', 'phone', 'password', 'password2']
+        extra_kwargs = {
+            'email': {'validators': []},  # Remove UniqueValidator for anti-enumeration
+        }
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError('A user with this email already exists.')
+        # NOTE: We intentionally do NOT reject duplicate emails here.
+        # The view handles existing-account silently to prevent
+        # user-enumeration attacks (see RegisterView docstring).
         return value
 
     def validate(self, data):

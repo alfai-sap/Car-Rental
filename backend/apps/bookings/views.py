@@ -70,7 +70,9 @@ def _find_available_unit(vehicle, pickup_date, return_date):
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.select_related(
         'customer', 'vehicle', 'vehicle_unit',
-    ).prefetch_related('vehicle__images')
+    ).prefetch_related(
+        'vehicle__images', 'customer__identity_documents',
+    )
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -86,6 +88,13 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         with transaction.atomic():
+            # Lock the vehicle record to prevent race conditions during
+            # availability checks (SELECT … FOR UPDATE).
+            # The locked row MUST be held in a variable — otherwise the
+            # lock is released immediately when the queryset is discarded.
+            vehicle = serializer.validated_data['vehicle']
+            locked_vehicle = Vehicle.objects.select_for_update().get(pk=vehicle.pk)
+
             snapshot = _build_identity_snapshot(self.request.user)
 
             booking = serializer.save(
@@ -178,11 +187,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         from django.conf import settings as s
 
         if not getattr(s, 'ALLOW_MANUAL_PAYMENT_CONFIRM', False):
-            if not request.user.is_superuser:
-                return Response(
-                    {'detail': 'Manual payment confirmation is disabled in production.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            return Response(
+                {'detail': 'Manual payment confirmation is disabled in production.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         booking = self.get_object()
         if not request.user.is_staff:
@@ -289,7 +297,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'unit_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            unit = VehicleUnit.objects.get(pk=unit_id, vehicle=booking.vehicle)
+            unit = VehicleUnit.objects.select_for_update().get(pk=unit_id, vehicle=booking.vehicle)
         except VehicleUnit.DoesNotExist:
             return Response({'detail': 'Vehicle unit not found or does not belong to this vehicle model.'}, status=status.HTTP_404_NOT_FOUND)
 

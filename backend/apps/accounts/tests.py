@@ -31,9 +31,12 @@ class RegisterTests(TestCase):
         self.assertIn('verify', mail.outbox[0].subject.lower())
 
     def test_register_duplicate_email_fails(self):
+        # The view intentionally returns 201 for duplicate emails to prevent
+        # user-enumeration attacks (see RegisterView docstring).
         self.client.post(self.url, self.valid_payload, format='json')
         response = self.client.post(self.url, self.valid_payload, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['detail'], 'Account created. Please check your email to verify your account.')
 
     def test_register_password_mismatch_fails(self):
         payload = {**self.valid_payload, 'password2': 'WrongPass123!'}
@@ -56,6 +59,7 @@ class LoginTests(TestCase):
             first_name='Login',
             last_name='Test',
             password='StrongPass123!',
+            is_verified=True,
         )
 
     def test_login_success(self):
@@ -65,7 +69,8 @@ class LoginTests(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
-        self.assertIn('refresh', response.data)
+        # Refresh token is in httpOnly cookie, not in JSON body
+        self.assertIn('refresh_token', response.cookies)
         self.assertIn('user', response.data)
 
     def test_login_wrong_password_fails(self):
@@ -99,12 +104,7 @@ class MeEndpointTests(TestCase):
         )
 
     def test_me_authenticated(self):
-        response = self.client.post('/api/auth/login/', {
-            'email': 'me@example.com',
-            'password': 'StrongPass123!',
-        }, format='json')
-        access = response.data['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+        self.client.force_authenticate(user=self.user)
         response = self.client.get('/api/auth/me/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['email'], 'me@example.com')
@@ -122,15 +122,16 @@ class TokenRefreshTests(TestCase):
             username='refresh',
             password='StrongPass123!',
         )
+        # Use force_authenticate to avoid rate-limiting login endpoint
+        self.client.force_authenticate(user=self.user)
 
     def test_token_refresh(self):
-        login_resp = self.client.post('/api/auth/login/', {
-            'email': 'refresh@example.com',
-            'password': 'StrongPass123!',
-        }, format='json')
-        refresh = login_resp.data['refresh']
+        # Get a refresh token for the user
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
+
         response = self.client.post('/api/auth/token/refresh/', {
-            'refresh': refresh,
+            'refresh': str(refresh),
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
@@ -152,22 +153,19 @@ class LogoutTests(TestCase):
         )
 
     def test_logout_blacklists_token(self):
-        login_resp = self.client.post('/api/auth/login/', {
-            'email': 'logout@example.com',
-            'password': 'StrongPass123!',
-        }, format='json')
-        access = login_resp.data['access']
-        refresh = login_resp.data['refresh']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access}')
+        # Use force_authenticate + direct token creation to avoid login rate limit
+        self.client.force_authenticate(user=self.user)
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
 
         response = self.client.post('/api/auth/logout/', {
-            'refresh': refresh,
+            'refresh': str(refresh),
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify token is blacklisted — refresh should fail
         refresh_resp = self.client.post('/api/auth/token/refresh/', {
-            'refresh': refresh,
+            'refresh': str(refresh),
         }, format='json')
         self.assertEqual(refresh_resp.status_code, status.HTTP_401_UNAUTHORIZED)
 

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Vehicle, VehicleImage
+from .models import Vehicle, VehicleImage, VehicleUnit
 
 
 class VehicleImageInline(admin.TabularInline):
@@ -27,3 +27,12 @@ class VehicleImageAdmin(admin.ModelAdmin):
     list_display = ['vehicle', 'is_primary', 'uploaded_at']
     list_filter = ['is_primary']
     search_fields = ['vehicle__make', 'vehicle__model']
+
+
+@admin.register(VehicleUnit)
+class VehicleUnitAdmin(admin.ModelAdmin):
+    list_display = ['plate_number', 'vehicle', 'status', 'mileage', 'updated_at']
+    list_filter = ['status']
+    search_fields = ['plate_number', 'vehicle__make', 'vehicle__model']
+    ordering = ['plate_number']
+    readonly_fields = ['created_at', 'updated_at']

@@ -4,15 +4,21 @@ from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 
 
 def _validate_upload_image(image):
-    """Validate uploaded image at serializer level — size + extension."""
-    limit_mb = 10
-    if image.size > limit_mb * 1024 * 1024:
-        raise serializers.ValidationError(f"Image file too large (max {limit_mb} MB).")
-    ext = image.name.rsplit('.', 1)[-1].lower() if '.' in image.name else ''
-    if ext not in ('jpg', 'jpeg', 'png', 'webp'):
-        raise serializers.ValidationError(
-            f"Unsupported file type: .{ext}. Allowed: jpg, jpeg, png, webp."
-        )
+    """Validate uploaded image at serializer level — delegates to shared validators."""
+    from apps.core.validators import validate_image_size, validate_image_content
+    from django.core.exceptions import ValidationError
+
+    # Size check (10 MB limit)
+    try:
+        validate_image_size(image, limit_mb=10)
+    except ValidationError as e:
+        raise serializers.ValidationError(e.message)
+
+    # Content check (real image, allowed formats, EXIF stripping)
+    try:
+        validate_image_content(image)
+    except ValidationError as e:
+        raise serializers.ValidationError(e.message)
 
 
 class VehicleImageSerializer(serializers.ModelSerializer):
@@ -168,6 +174,8 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
 class VehicleUnitSerializer(serializers.ModelSerializer):
     vehicle_name = serializers.SerializerMethodField(read_only=True)
 
+    PH_PLATE_REGEX = r'^[A-Z]{3}-\d{3,4}$'
+
     class Meta:
         model = VehicleUnit
         fields = [
@@ -180,9 +188,14 @@ class VehicleUnitSerializer(serializers.ModelSerializer):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
 
     def validate_plate_number(self, value):
+        import re
         qs = VehicleUnit.objects.filter(plate_number=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise serializers.ValidationError('A unit with this plate number already exists.')
+        if not re.match(self.PH_PLATE_REGEX, value):
+            raise serializers.ValidationError(
+                'Plate number must match the format ABC-1234 or ABC-123 (e.g. NCR-4512).'
+            )
         return value
