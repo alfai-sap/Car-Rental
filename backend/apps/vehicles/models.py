@@ -93,7 +93,11 @@ class VehicleUnit(models.Model):
     ]
 
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='units')
-    plate_number = models.CharField(max_length=20, unique=True)
+    plate_number = models.CharField(
+        max_length=20,
+        unique=True,
+        help_text='Format: ABC-1234 or ABC-123 (3 letters, dash, 3-4 digits).',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
     mileage = models.PositiveIntegerField(default=0, blank=True)
     notes = models.TextField(blank=True)
@@ -102,6 +106,12 @@ class VehicleUnit(models.Model):
 
     class Meta:
         ordering = ['plate_number']
+        constraints = [
+            models.CheckConstraint(
+                name='%(app_label)s_%(class)s_plate_number_format',
+                check=models.Q(plate_number__regex=r'^[A-Z]{3}-\d{3,4}$'),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.plate_number} — {self.vehicle} ({self.get_status_display()})"
