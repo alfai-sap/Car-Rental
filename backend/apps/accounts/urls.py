@@ -14,5 +14,6 @@ urlpatterns = [
     path('auth/reset-password/confirm/', views.PasswordResetConfirmView.as_view(), name='auth-reset-confirm'),
     path('identity-documents/', views.IdentityDocumentUploadView.as_view(), name='identity-documents'),
     path('identity-documents/<int:pk>/', views.IdentityDocumentDetailView.as_view(), name='identity-document-detail'),
+    path('identity-documents/<int:pk>/image/<str:side>/', views.IdentityDocumentImageView.as_view(), name='identity-document-image'),
     path('notifications/', views.NotificationsView.as_view(), name='notifications'),
 ]

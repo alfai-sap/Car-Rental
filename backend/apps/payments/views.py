@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import logging
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,6 +15,8 @@ from rest_framework.views import APIView
 from apps.bookings.models import Booking
 from apps.payments.models import Invoice, Payment
 from apps.core import services as notify
+
+logger = logging.getLogger(__name__)
 
 
 def payment_gateway_enabled():
@@ -142,6 +147,12 @@ class PaymentHistoryView(APIView):
 
 
 class PaymentWebhookView(APIView):
+    """Handle PayMongo webhook events.
+
+    Implements HMAC-SHA256 signature verification using the webhook secret
+    configured in PAYMONGO_WEBHOOK_SECRET.  Payment status transitions are
+    processed inside a database transaction.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -151,9 +162,94 @@ class PaymentWebhookView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # TODO(Phase 7): Verify PayMongo webhook signature using PAYMONGO_WEBHOOK_SECRET
-        # before processing the payment status update. See PayMongo webhook docs.
-        return Response(
-            {'detail': 'Webhook endpoint ready. Signature verification will be implemented in Payment Phase.'},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
+        # ── 1. Verify PayMongo webhook signature ──
+        signature = request.headers.get('Paymongo-Signature', '')
+        if not self._verify_signature(request.body, signature):
+            logger.warning('PayMongo webhook: signature verification failed')
+            return Response(
+                {'detail': 'Invalid webhook signature.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ── 2. Extract event data ──
+        event_data = request.data.get('data', {})
+        event_type = event_data.get('attributes', {}).get('type', '')
+        event_id = event_data.get('id', '')
+
+        if not event_id:
+            return Response({'detail': 'Missing event ID.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── 3. Idempotency check — don't process the same event twice ──
+        if Payment.objects.filter(raw_payload__contains={'data': {'id': event_id}}).exists():
+            logger.info('PayMongo webhook: duplicate event %s ignored', event_id)
+            return Response({'detail': 'Event already processed.'})
+
+        # ── 4. Only handle payment success events ──
+        if event_type != 'payment.paid':
+            logger.info('PayMongo webhook: unhandled event type %s', event_type)
+            return Response({'detail': f'Event type {event_type} acknowledged.'})
+
+        # ── 5. Find the Payment record via the PayMongo payment ID ──
+        paymongo_payment_id = event_data.get('id', '')
+        payment = Payment.objects.filter(
+            provider_reference=paymongo_payment_id,
+            payment_status=Payment.STATUS_PENDING,
+        ).select_related('booking', 'invoice').first()
+
+        if not payment:
+            logger.warning(
+                'PayMongo webhook: no pending payment found for reference %s',
+                paymongo_payment_id,
+            )
+            return Response(
+                {'detail': 'No matching pending payment found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ── 6. Process payment and update booking status ──
+        with transaction.atomic():
+            payment.payment_status = Payment.STATUS_PAID
+            payment.paid_at = timezone.now()
+            payment.payment_method = (
+                event_data.get('attributes', {})
+                .get('payments', [{}])[0]
+                .get('source', {})
+                .get('type', '')
+            )
+            payment.raw_payload = request.data
+            payment.save()
+
+            booking = payment.booking
+            booking.status = 'confirmed'
+            if booking.vehicle_unit:
+                booking.vehicle_unit.status = 'booked'
+                booking.vehicle_unit.save()
+            booking.save()
+
+            if payment.invoice:
+                payment.invoice.invoice_status = Invoice.STATUS_PAID
+                payment.invoice.save()
+
+        notify.notify_payment_successful(booking)
+        notify.notify_booking_confirmed(booking)
+
+        logger.info(
+            'PayMongo webhook: payment %s confirmed for booking %s',
+            payment.payment_number,
+            booking.booking_number,
         )
+
+        return Response({'detail': 'Payment processed successfully.'})
+
+    def _verify_signature(self, body: bytes, signature: str) -> bool:
+        """Verify PayMongo HMAC-SHA256 webhook signature.
+
+        The signature format is:  t=<timestamp>,te=,li=<hash>
+        We recompute the hash using the webhook secret and compare.
+        """
+        if not signature or not body:
+            return False
+
+        secret = settings.PAYMONGO_WEBHOOK_SECRET.encode()
+        expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)

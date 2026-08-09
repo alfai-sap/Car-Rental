@@ -63,6 +63,9 @@ python manage.py seed_vehicles
 ```bash
 python manage.py seed_vehicles --clear
 ```
+# delete all data, keep schema
+python manage.py flush --noinput
+
 
 # 1. Drop and recreate the database
 psql -U postgres -c "DROP DATABASE IF EXISTS car_rental;"

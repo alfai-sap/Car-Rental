@@ -119,7 +119,7 @@ const createImages = ref<File[]>([])
 function openCreateModal() {
   createForm.value = {
     make: '', model: '', year: new Date().getFullYear(),
-    type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+    type: 'sedan', transmission: 'automatic', fuel: 'gasoline',
     seats: 5, price_per_day: '', description: '',
   }
   createImages.value = []

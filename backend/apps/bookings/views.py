@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
@@ -171,9 +171,19 @@ class BookingViewSet(viewsets.ModelViewSet):
         """Admin manually confirms payment (development simulation).
 
         In production, payment is confirmed via PayMongo webhook only.
-        This endpoint is a backdoor for testing the full booking workflow
-        before payment integration is activated.
+        This endpoint is restricted to superusers and is intended for
+        development/testing. It MUST be disabled in production by
+        setting ALLOW_MANUAL_PAYMENT_CONFIRM=False in the environment.
         """
+        from django.conf import settings as s
+
+        if not getattr(s, 'ALLOW_MANUAL_PAYMENT_CONFIRM', False):
+            if not request.user.is_superuser:
+                return Response(
+                    {'detail': 'Manual payment confirmation is disabled in production.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         booking = self.get_object()
         if not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
@@ -333,7 +343,7 @@ class BookingViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────
 
 class AvailabilityView(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def list(self, request):
         vehicle_id = request.query_params.get('vehicle_id')

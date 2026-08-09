@@ -93,7 +93,7 @@ async function fetchVehicle() {
   if (isNew.value) {
     vehicle.value = {
       id: 0, make: '', model: '', year: new Date().getFullYear(),
-      type: 'Sedan', transmission: 'automatic', fuel: 'gasoline',
+      type: 'sedan', transmission: 'automatic', fuel: 'gasoline',
       seats: 5, price_per_day: '', status: 'available', description: '',
       images: [], created_at: '', updated_at: '',
     }

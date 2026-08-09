@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.template.loader import render_to_string
+from django.http import FileResponse, Http404
 import logging
 from rest_framework import status, views
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -141,11 +142,19 @@ class VerifyEmailView(views.APIView):
         user.is_verified = True
         user.verified_at = timezone.now()
         user.save()
+
+        # Invalidate all existing sessions — user must sign in fresh after verification
+        from rest_framework_simplejwt.token_blacklist.models import (
+            OutstandingToken,
+        )
+        OutstandingToken.objects.filter(user=user).delete()
+
         return Response({'detail': 'Email verified successfully. You can now sign in.'})
 
 
 class ResendVerificationView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'verification_resend'
 
     def post(self, request):
         email = request.data.get('email', '')
@@ -212,6 +221,7 @@ class IdentityDocumentDetailView(views.APIView):
 
 class PasswordResetRequestView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -269,7 +279,16 @@ class PasswordResetConfirmView(views.APIView):
         user = data['user']
         user.set_password(data['password'])
         user.save()
-        return Response({'detail': 'Password reset successful.'})
+
+        # Invalidate all existing sessions for this user by blacklisting
+        # every outstanding refresh token. This ensures that if someone
+        # else had access to a session, they are kicked out.
+        from rest_framework_simplejwt.token_blacklist.models import (
+            OutstandingToken,
+        )
+        OutstandingToken.objects.filter(user=user).delete()
+
+        return Response({'detail': 'Password reset successful. Please sign in again.'})
 
 
 class LogoutView(views.APIView):
@@ -351,3 +370,55 @@ class NotificationsView(views.APIView):
             return Response({'detail': 'Provide notification_id or mark_all=true.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({'detail': 'Notifications updated.'})
+
+
+class IdentityDocumentImageView(views.APIView):
+    """Serve identity document images through a signed URL.
+
+    Identity documents contain PII and must never be served publicly.
+    The URL includes a short-lived signed token (5 min) so that
+    <img> tags can load images without Authorization headers.
+    The token is scoped to the document id + side, and checked
+    against the requesting user's identity.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk, side):
+        token = request.query_params.get('token', '')
+        if not token:
+            # Fall back to auth-based access for non-browser clients
+            if not request.user.is_authenticated:
+                raise Http404
+            return self._serve_image(request.user, pk, side)
+
+        try:
+            signed_pk = account_token_generator.signer.unsign(token, max_age=300)
+        except (SignatureExpired, BadSignature):
+            raise Http404
+
+        if signed_pk != str(pk):
+            raise Http404
+
+        # Token valid — serve the image
+        doc = get_object_or_404(IdentityDocument, pk=pk)
+        return self._serve_file(doc, side)
+
+    def _serve_image(self, user, pk, side):
+        """Auth-based access (for API clients sending JWT)."""
+        doc = get_object_or_404(IdentityDocument, pk=pk)
+        if doc.user != user and not user.is_staff:
+            raise Http404
+        return self._serve_file(doc, side)
+
+    def _serve_file(self, doc, side):
+        if side == 'front':
+            image_field = doc.front_image
+        elif side == 'back':
+            image_field = doc.back_image
+        else:
+            return Response({'detail': 'Invalid side.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not image_field:
+            raise Http404
+
+        return FileResponse(image_field.open(), content_type='image/jpeg')

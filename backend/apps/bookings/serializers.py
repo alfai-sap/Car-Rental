@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking, AssignmentHistory
+from apps.accounts.serializers import _identity_image_token
 from apps.vehicles.models import VehicleUnit
 
 # Statuses that occupy a VehicleUnit
@@ -36,9 +37,10 @@ class BookingSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'booking_number', 'customer', 'vehicle_unit', 'rental_days',
-            'subtotal', 'estimated_total', 'status', 'rejection_reason',
-            'cancellation_reason', 'created_at', 'updated_at', 'handover_time',
+            'id', 'booking_number', 'customer', 'vehicle_unit',
+            'rental_days', 'subtotal', 'estimated_total', 'status',
+            'rejection_reason', 'cancellation_reason', 'created_at',
+            'updated_at', 'handover_time',
         ]
 
     def get_vehicle_unit_plate(self, obj):
@@ -59,15 +61,15 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def get_customer_identity_docs(self, obj):
         docs = obj.customer.identity_documents.all()
-        request = self.context.get('request')
         result = []
         for doc in docs:
+            token = _identity_image_token(doc.id)
             item = {
                 'id': doc.id,
                 'document_type': doc.document_type,
                 'document_number': doc.document_number,
-                'front_image': request.build_absolute_uri(doc.front_image.url) if request and doc.front_image else None,
-                'back_image': request.build_absolute_uri(doc.back_image.url) if request and doc.back_image else None,
+                'front_image': f'/api/identity-documents/{doc.id}/image/front/?token={token}',
+                'back_image': f'/api/identity-documents/{doc.id}/image/back/?token={token}' if doc.back_image else None,
             }
             result.append(item)
         return result
@@ -80,18 +82,25 @@ class BookingSerializer(serializers.ModelSerializer):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
 
     def get_vehicle_images(self, obj):
-        request = self.context.get('request')
         images = []
         for img in obj.vehicle.images.all():
+            try:
+                url = img.image.url
+            except (ValueError, OSError):
+                continue
             images.append({
                 'id': img.id,
-                'image': request.build_absolute_uri(img.image.url) if request else img.image.url,
+                'image': url,
                 'is_primary': img.is_primary,
             })
         return images
 
     def validate(self, data):
         if self.instance is not None:
+            # Block modification of core fields on existing bookings
+            for blocked in ('vehicle', 'pickup_date', 'return_date', 'pickup_time', 'return_time'):
+                if blocked in data:
+                    raise serializers.ValidationError({blocked: 'This field cannot be modified after booking.'})
             # Partial validation for updates — only check dates if both are being changed
             pickup_date = data.get('pickup_date', self.instance.pickup_date)
             return_date = data.get('return_date', self.instance.return_date)
@@ -196,16 +205,16 @@ class DashboardBookingSerializer(serializers.ModelSerializer):
     def get_vehicle_image(self, obj):
         primary = obj.vehicle.images.filter(is_primary=True).first()
         if primary and primary.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(primary.image.url)
-            return primary.image.url
+            try:
+                return primary.image.url
+            except (ValueError, OSError):
+                pass
         first = obj.vehicle.images.first()
         if first and first.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(first.image.url)
-            return first.image.url
+            try:
+                return first.image.url
+            except (ValueError, OSError):
+                pass
         return None
 
 

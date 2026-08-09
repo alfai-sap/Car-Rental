@@ -1,5 +1,44 @@
+from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models
+
+
+def _validate_image_content(image):
+    """Verify the uploaded file is a valid image and strip EXIF metadata."""
+    from PIL import Image
+    import io
+
+    allowed = {'jpeg', 'png', 'webp'}
+
+    try:
+        img = Image.open(image)
+        if img.format.lower() not in allowed:
+            raise ValidationError(
+                f"Unsupported image format: {img.format}. "
+                f"Allowed: {', '.join(sorted(allowed))}."
+            )
+
+        # Strip EXIF data
+        data = list(img.getdata())
+        cleaned = Image.new(img.mode, img.size)
+        cleaned.putdata(data)
+
+        buf = io.BytesIO()
+        save_format = 'JPEG' if img.format.lower() in ('jpeg', 'jpg') else img.format.upper()
+        cleaned.save(buf, format=save_format, quality=85)
+        buf.seek(0)
+
+        image.file = buf
+        image.size = buf.getbuffer().nbytes
+    except (IOError, OSError) as e:
+        raise ValidationError(f"Invalid or corrupted image file: {e}")
+
+
+def _validate_image_size(image):
+    """Reject images larger than 10 MB."""
+    limit_mb = 10
+    if image.size > limit_mb * 1024 * 1024:
+        raise ValidationError(f"Image file too large (max {limit_mb} MB).")
 
 
 class Vehicle(models.Model):
@@ -65,7 +104,11 @@ class VehicleImage(models.Model):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(
         upload_to='vehicles/',
-        validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp'])],
+        validators=[
+            FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp']),
+            _validate_image_size,
+            _validate_image_content,
+        ],
     )
     is_primary = models.BooleanField(default=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)

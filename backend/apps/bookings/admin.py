@@ -1,4 +1,5 @@
 from django.contrib import admin
+from apps.core import services as notify
 from .models import Booking, AssignmentHistory
 
 
@@ -40,13 +41,24 @@ class BookingAdmin(admin.ModelAdmin):
 
     @admin.action(description='Approve selected bookings')
     def approve_selected(self, request, queryset):
-        updated = queryset.filter(status='pending_approval').update(status='approved')
-        self.message_user(request, f'{updated} booking(s) approved.')
+        count = 0
+        for booking in queryset.filter(status='pending_approval'):
+            booking.status = 'approved'
+            booking.save()
+            notify.notify_booking_approved(booking)
+            count += 1
+        self.message_user(request, f'{count} booking(s) approved and notified.')
 
     @admin.action(description='Reject selected bookings')
     def reject_selected(self, request, queryset):
-        updated = queryset.filter(status='pending_approval').update(status='rejected', rejection_reason='Rejected by admin.')
-        self.message_user(request, f'{updated} booking(s) rejected.')
+        count = 0
+        for booking in queryset.filter(status='pending_approval'):
+            booking.status = 'rejected'
+            booking.rejection_reason = 'Rejected by admin.'
+            booking.save()
+            notify.notify_booking_rejected(booking)
+            count += 1
+        self.message_user(request, f'{count} booking(s) rejected and notified.')
 
 
 @admin.register(AssignmentHistory)

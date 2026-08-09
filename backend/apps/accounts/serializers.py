@@ -35,6 +35,14 @@ def _get_token_timeout():
 account_token_generator = AccountTokenGenerator()
 
 
+def _identity_image_token(pk):
+    """Short-lived signed token for identity document image access (5 min).
+
+    Allows <img> tags to load identity documents without Auth headers.
+    """
+    return account_token_generator.signer.sign(str(pk))
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
@@ -104,6 +112,16 @@ class IdentityDocumentSerializer(serializers.ModelSerializer):
         model = IdentityDocument
         fields = ['id', 'document_type', 'document_number', 'front_image', 'back_image', 'submitted_at', 'updated_at']
         read_only_fields = ['submitted_at', 'updated_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.front_image:
+            token = _identity_image_token(instance.id)
+            data['front_image'] = f'/api/identity-documents/{instance.id}/image/front/?token={token}'
+        if instance.back_image:
+            token = _identity_image_token(instance.id)
+            data['back_image'] = f'/api/identity-documents/{instance.id}/image/back/?token={token}'
+        return data
 
 
 class UserSerializer(serializers.ModelSerializer):
