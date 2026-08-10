@@ -28,24 +28,39 @@ def validate_image_content(image):
 
     try:
         img = Image.open(image)
-        if img.format.lower() not in allowed:
-            raise ValidationError(
-                f"Unsupported image format: {img.format}. "
-                f"Allowed: {', '.join(sorted(allowed))}."
-            )
+    except Exception:
+        raise ValidationError(
+            'The uploaded file is not a valid image. Please upload a JPG, PNG, or WebP file.'
+        )
 
-        # Strip EXIF data by re-saving without metadata
+    try:
+        fmt = (img.format or '').lower()
+    except Exception:
+        raise ValidationError(
+            'Could not determine the image format. Please upload a JPG, PNG, or WebP file.'
+        )
+
+    if fmt not in allowed:
+        raise ValidationError(
+            f"Unsupported image format: {fmt or 'unknown'}. "
+            f"Allowed: {', '.join(sorted(allowed))}."
+        )
+
+    # Strip EXIF data by re-saving without metadata
+    try:
         data = list(img.getdata())
         cleaned = Image.new(img.mode, img.size)
         cleaned.putdata(data)
 
         buf = io.BytesIO()
-        save_format = 'JPEG' if img.format.lower() in ('jpeg', 'jpg') else img.format.upper()
+        save_format = 'JPEG' if fmt in ('jpeg', 'jpg') else fmt.upper()
         cleaned.save(buf, format=save_format, quality=85)
         buf.seek(0)
 
         # Replace the uploaded file content with the cleaned version
         image.file = buf
         image.size = buf.getbuffer().nbytes
-    except (IOError, OSError) as e:
-        raise ValidationError(f"Invalid or corrupted image file: {e}")
+    except Exception as e:
+        raise ValidationError(
+            f"Failed to process the image: {e}. Please try a different file."
+        )

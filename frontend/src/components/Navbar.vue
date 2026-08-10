@@ -93,6 +93,13 @@ onMounted(async () => {
                   Manage Vehicles
                 </RouterLink>
                 <RouterLink
+                  to="/admin/audit-logs"
+                  class="block w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
+                  @click="closeDropdown"
+                >
+                  Audit Log
+                </RouterLink>
+                <RouterLink
                   to="/notifications"
                   class="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 rounded"
                   @click="closeDropdown"

@@ -11,7 +11,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from apps.core.models import Notification
+from apps.core.models import Notification, AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,33 @@ def create_admin_notification(*, notification_type, title, message, booking=None
         )
         notifications.append(n)
     return notifications
+
+
+# ─────────────────────────────────────────────
+#  Audit log helper
+# ─────────────────────────────────────────────
+
+def create_audit_log(*, actor, action, booking=None, payment=None, summary,
+                     before_state=None, after_state=None, request=None):
+    """Create an immutable audit log entry for an admin action."""
+    ip = None
+    if request:
+        x_forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+        if x_forwarded:
+            ip = x_forwarded.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR', '')
+
+    return AuditLog.objects.create(
+        actor=actor,
+        action=action,
+        booking=booking,
+        payment=payment,
+        summary=summary,
+        before_state=before_state or {},
+        after_state=after_state or {},
+        ip_address=ip,
+    )
 
 
 # ─────────────────────────────────────────────

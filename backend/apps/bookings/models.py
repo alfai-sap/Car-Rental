@@ -71,16 +71,21 @@ class Booking(models.Model):
         return f"{self.booking_number} — {self.vehicle} ({self.get_status_display()})"
 
     def save(self, *args, **kwargs):
+        is_new = not self.pk
         if not self.booking_number:
             self.booking_number = self._generate_booking_number()
-        if self.rental_days is None or not self.rental_days:
+        # Only auto-calculate on creation and only for fields that were
+        # not explicitly provided (None / 0).  On subsequent saves,
+        # use update_fields to avoid overwriting stored values.
+        if is_new:
             if self.return_date <= self.pickup_date:
                 raise ValueError('Return date must be after pickup date.')
-            self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
-        if self.subtotal is None:
-            self.subtotal = self.vehicle.price_per_day * self.rental_days
-        if self.estimated_total is None:
-            self.estimated_total = self.subtotal  # deposits/taxes added in Phase 5
+            if self.rental_days is None or not self.rental_days:
+                self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
+            if self.subtotal is None:
+                self.subtotal = self.vehicle.price_per_day * self.rental_days
+            if self.estimated_total is None:
+                self.estimated_total = self.subtotal  # deposits/taxes added in Phase 5
         super().save(*args, **kwargs)
 
     @staticmethod

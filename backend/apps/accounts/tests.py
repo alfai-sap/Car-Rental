@@ -130,17 +130,17 @@ class TokenRefreshTests(TestCase):
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(self.user)
 
-        response = self.client.post('/api/auth/token/refresh/', {
-            'refresh': str(refresh),
-        }, format='json')
+        # CookieTokenRefreshView reads from httpOnly cookie, not request body
+        self.client.cookies['refresh_token'] = str(refresh)
+        response = self.client.post('/api/auth/token/refresh/', {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
 
     def test_token_refresh_invalid_fails(self):
-        response = self.client.post('/api/auth/token/refresh/', {
-            'refresh': 'invalid-token',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.client.cookies['refresh_token'] = 'invalid-token'
+        response = self.client.post('/api/auth/token/refresh/', {}, format='json')
+        # CookieTokenRefreshView returns 400 for invalid/expired tokens
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutTests(TestCase):
@@ -158,16 +158,16 @@ class LogoutTests(TestCase):
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(self.user)
 
+        # LogoutView reads refresh token from request body
         response = self.client.post('/api/auth/logout/', {
             'refresh': str(refresh),
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Verify token is blacklisted — refresh should fail
-        refresh_resp = self.client.post('/api/auth/token/refresh/', {
-            'refresh': str(refresh),
-        }, format='json')
-        self.assertEqual(refresh_resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        # Verify token is blacklisted — refresh via cookie should fail
+        self.client.cookies['refresh_token'] = str(refresh)
+        refresh_resp = self.client.post('/api/auth/token/refresh/', {}, format='json')
+        self.assertEqual(refresh_resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_logout_unauthenticated_fails(self):
         response = self.client.post('/api/auth/logout/', {}, format='json')

@@ -1,5 +1,5 @@
 from rest_framework import viewsets, filters
-from rest_framework.permissions import AllowAny, IsAdminUser, SAFE_METHODS
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, SAFE_METHODS
 from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
@@ -59,7 +59,7 @@ class VehicleImageViewSet(viewsets.ModelViewSet):
 class VehicleUnitViewSet(viewsets.ModelViewSet):
     queryset = VehicleUnit.objects.select_related('vehicle').all()
     serializer_class = VehicleUnitSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]  # authenticated only; write is admin
     lookup_field = 'pk'
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 

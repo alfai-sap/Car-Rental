@@ -6,11 +6,13 @@ from apps.core.validators import validate_image_size, validate_image_content
 class Vehicle(models.Model):
     """Represents a vehicle model listing displayed to customers.
 
-    Availability is determined per VehicleUnit — this model stores shared
-    listing info (make, model, price, images) while VehicleUnit tracks
-    per-unit status (available, reserved, booked, active_rental, etc.).
-    The 'status' field here is deprecated and only retained for seed data
-    compatibility. Always use VehicleUnit to determine real availability.
+    The 'status' field controls whether this vehicle appears in customer
+    listings.  Set status='available' to show it; set status='unavailable'
+    to hide it (e.g. when the model is temporarily not offered).
+
+    Actual unit-level availability for booking is determined per
+    VehicleUnit — use VehicleUnit.status to know which individual
+    units are free, reserved, or in maintenance.
     """
     TRANSMISSION_CHOICES = [
         ('automatic', 'Automatic'),

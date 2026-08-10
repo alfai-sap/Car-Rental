@@ -101,12 +101,10 @@ class BookingSerializer(serializers.ModelSerializer):
             for blocked in ('vehicle', 'pickup_date', 'return_date', 'pickup_time', 'return_time'):
                 if blocked in data:
                     raise serializers.ValidationError({blocked: 'This field cannot be modified after booking.'})
-            # Partial validation for updates — only check dates if both are being changed
-            pickup_date = data.get('pickup_date', self.instance.pickup_date)
+            # For updates, only validate that return_date >= pickup_date if
+            # return_date is being explicitly changed (pickup_date is blocked above)
             return_date = data.get('return_date', self.instance.return_date)
-            if pickup_date < timezone.now().date():
-                raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
-            if return_date < pickup_date:
+            if return_date < self.instance.pickup_date:
                 raise serializers.ValidationError({'return_date': 'Return date must be after pickup date.'})
             return data
 

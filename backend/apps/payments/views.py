@@ -51,6 +51,42 @@ class PaymentCreateSessionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        checkout_url = None
+        provider = Payment.PROVIDER_PAYMONGO if payment_gateway_enabled() else Payment.PROVIDER_DISABLED
+
+        # ── Call PayMongo FIRST before any DB writes ──
+        # This prevents the booking from being left in 'awaiting_payment'
+        # with no checkout URL if the PayMongo API is unreachable.
+        paymongo_result = None
+        if provider == Payment.PROVIDER_PAYMONGO:
+            try:
+                from apps.payments.paymongo import create_checkout_session, PayMongoError
+
+                vehicle_name = f'{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}'
+                description = f'Rental: {vehicle_name} ({booking.pickup_date} – {booking.return_date})'
+
+                paymongo_result = create_checkout_session(
+                    amount=float(booking.estimated_total),
+                    currency='PHP',
+                    description=description,
+                    payment_reference=f'PMT-{booking.booking_number}',
+                    success_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=success',
+                    cancel_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=cancelled',
+                    customer_email=booking.customer.email,
+                    customer_name=f'{booking.customer.first_name} {booking.customer.last_name}',
+                    customer_phone=booking.customer.phone or None,
+                )
+                checkout_url = paymongo_result['checkout_url']
+            except PayMongoError as e:
+                logger.error(
+                    'PayMongo checkout failed for booking %s: %s',
+                    booking.booking_number, e,
+                )
+                return Response(
+                    {'detail': f'Payment provider error: {e}. Please try again.'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
         with transaction.atomic():
             # Transition from approved → awaiting_payment if needed
             if booking.status == 'approved':
@@ -72,52 +108,19 @@ class PaymentCreateSessionView(APIView):
             payment = Payment.objects.create(
                 booking=booking,
                 invoice=invoice,
-                provider=Payment.PROVIDER_PAYMONGO if payment_gateway_enabled() else Payment.PROVIDER_DISABLED,
+                provider=provider,
                 amount=invoice.total,
                 currency='PHP',
                 payment_status=Payment.STATUS_PENDING,
             )
 
-        # ── Call PayMongo to create a real checkout session ──
-        checkout_url = None
-        if payment_gateway_enabled() and payment.provider == Payment.PROVIDER_PAYMONGO:
-            try:
-                from apps.payments.paymongo import create_checkout_session, PayMongoError
-
-                vehicle_name = f'{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}'
-                description = f'Rental: {vehicle_name} ({booking.pickup_date} – {booking.return_date})'
-
-                result = create_checkout_session(
-                    amount=float(invoice.total),
-                    currency='PHP',
-                    description=description,
-                    payment_reference=payment.payment_number,
-                    success_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=success',
-                    cancel_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=cancelled',
-                    customer_email=booking.customer.email,
-                    customer_name=f'{booking.customer.first_name} {booking.customer.last_name}',
-                    customer_phone=booking.customer.phone or None,
-                )
-
-                checkout_url = result['checkout_url']
-
-                # Store PayMongo references for webhook matching
-                payment.provider_reference = result['paymongo_payment_id']
+            if paymongo_result:
+                payment.provider_reference = paymongo_result['paymongo_payment_id']
                 payment.checkout_url = checkout_url
                 payment.save(update_fields=['provider_reference', 'checkout_url', 'updated_at'])
-
                 logger.info(
                     'PayMongo checkout session created for booking %s (payment %s)',
                     booking.booking_number, payment.payment_number,
-                )
-            except PayMongoError as e:
-                logger.error(
-                    'PayMongo checkout failed for booking %s: %s',
-                    booking.booking_number, e,
-                )
-                return Response(
-                    {'detail': f'Payment provider error: {e}. Please try again.'},
-                    status=status.HTTP_502_BAD_GATEWAY,
                 )
 
         return Response({
@@ -177,6 +180,7 @@ class PaymentHistoryView(APIView):
                 'booking': payment.booking_id,
                 'booking_number': payment.booking.booking_number,
                 'invoice_number': payment.invoice.invoice_number if payment.invoice else None,
+                'invoice_total': str(payment.invoice.total) if payment.invoice else None,
                 'provider': payment.provider,
                 'amount': str(payment.amount),
                 'currency': payment.currency,

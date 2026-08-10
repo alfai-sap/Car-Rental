@@ -177,7 +177,7 @@ async function handleRegister() {
           </Button>
         </form>
 
-        <p class="text-sm text-center text-zinc-500 mt-6">
+        <p v-if="!registered" class="text-sm text-center text-zinc-500 mt-6">
           Already have an account?
           <RouterLink to="/login" class="text-zinc-900 font-medium hover:underline">
             Sign In

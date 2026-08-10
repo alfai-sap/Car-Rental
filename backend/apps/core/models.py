@@ -57,3 +57,61 @@ class Notification(models.Model):
     def __str__(self):
         return f"[{self.get_notification_type_display()}] {self.title} — {self.user.email}"
 
+
+class AuditLog(models.Model):
+    """Immutable audit trail for all admin actions on bookings and payments.
+
+    Every admin-initiated state change is recorded with the acting user,
+    target booking, action performed, and before/after snapshots.
+    """
+    ACTION_TYPES = [
+        ('booking_approved', 'Booking Approved'),
+        ('booking_rejected', 'Booking Rejected'),
+        ('payment_confirmed', 'Payment Manually Confirmed'),
+        ('rental_activated', 'Rental Activated'),
+        ('rental_completed', 'Rental Completed'),
+        ('unit_assigned', 'Vehicle Unit Assigned'),
+        ('unit_changed', 'Vehicle Unit Changed'),
+        ('booking_cancelled', 'Booking Cancelled'),
+        ('booking_marked_waiting', 'Booking Marked Waiting'),
+        ('profile_updated', 'Profile Updated'),
+    ]
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='audit_logs',
+    )
+    action = models.CharField(max_length=40, choices=ACTION_TYPES)
+    booking = models.ForeignKey(
+        'bookings.Booking',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+    )
+    payment = models.ForeignKey(
+        'payments.Payment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+    )
+    summary = models.CharField(max_length=500)
+    before_state = models.JSONField(default=dict, blank=True)
+    after_state = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['actor', '-created_at']),
+            models.Index(fields=['booking', '-created_at']),
+            models.Index(fields=['action', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_action_display()}] by {self.actor.email} — {self.created_at}"
+

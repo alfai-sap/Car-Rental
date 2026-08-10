@@ -54,7 +54,7 @@ class NotificationAPITests(TestCase):
         )
         self.admin = User.objects.create_user(
             email='admin@test.com', username='admin', password='Admin123!',
-            is_staff=True,
+            is_staff=True, is_verified=True,
         )
         self.vehicle = Vehicle.objects.create(
             make='Toyota', model='Vios', year=2024, type='sedan',

@@ -141,15 +141,15 @@ class LoginView(views.APIView):
 
         user = User.objects.filter(email=email).first()
         if user and user.check_password(password):
-            if not user.is_verified:
-                # Return the same 401 as an invalid login to prevent
-                # user-enumeration (an attacker cannot tell whether the
-                # email is registered by comparing 401 vs 403).
+            if not user.is_verified and not user.is_staff:
+                # Return 401 with code=unverified so the frontend can show
+                # helpful instructions without leaking to attackers (the
+                # HTTP status and generic message remain identical).
                 logger.info(
                     'Login attempt for unverified account: %s', email,
                 )
                 return Response(
-                    {'detail': 'Invalid email or password.'},
+                    {'detail': 'Invalid email or password.', 'code': 'email_unverified'},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
             tokens = get_tokens_for_user(user)
@@ -217,6 +217,70 @@ class MeView(views.APIView):
         data = UserSerializer(request.user).data
         data['identity_locked'] = has_active_bookings(request.user)
         return Response(data)
+
+    def put(self, request):
+        """Update profile fields (first_name, last_name, phone) and/or password."""
+        user = request.user
+        updated = False
+
+        # ── Profile fields ──
+        for field in ('first_name', 'last_name', 'phone'):
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                updated = True
+
+        if updated:
+            user.save(update_fields=[f for f in ('first_name', 'last_name', 'phone') if f in request.data])
+
+        # ── Password change ──
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+        new_password2 = request.data.get('new_password2')
+
+        if current_password or new_password or new_password2:
+            # All three fields required for password change
+            if not current_password:
+                return Response({'current_password': 'Current password is required to change password.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not new_password:
+                return Response({'new_password': 'New password is required.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not new_password2:
+                return Response({'new_password2': 'Please confirm your new password.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if not user.check_password(current_password):
+                return Response({'current_password': 'Current password is incorrect.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if new_password != new_password2:
+                return Response({'new_password2': 'New passwords do not match.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if current_password == new_password:
+                return Response({'new_password': 'New password must be different from current password.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            from django.contrib.auth.password_validation import validate_password
+            from django.core.exceptions import ValidationError
+            try:
+                validate_password(new_password, user)
+            except ValidationError as e:
+                return Response({'new_password': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.set_password(new_password)
+            user.save()
+
+            # Invalidate all existing sessions
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+            OutstandingToken.objects.filter(user=user).delete()
+
+            return Response({'detail': 'Password changed. Please sign in again.'})
+
+        if updated:
+            data = UserSerializer(user).data
+            data['identity_locked'] = has_active_bookings(user)
+            return Response(data)
+
+        return Response({'detail': 'No changes provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class IdentityDocumentUploadView(views.APIView):
@@ -386,12 +450,6 @@ class CookieTokenRefreshView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not refresh_token:
-            return Response(
-                {'detail': 'No refresh token provided.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             token = RefreshToken(refresh_token)
             token.check_exp()
@@ -491,8 +549,12 @@ class IdentityDocumentImageView(views.APIView):
     <img> tags can load images without Authorization headers.
     The token is scoped to the document id + side, and checked
     against the requesting user's identity.
+
+    Rate-limited to 30 req/min per IP to mitigate scraping within
+    the 5-minute token window.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'identity_doc_image'
 
     def get(self, request, pk, side):
         token = request.query_params.get('token', '')
@@ -503,7 +565,7 @@ class IdentityDocumentImageView(views.APIView):
             return self._serve_image(request.user, pk, side)
 
         try:
-            signed_pk = account_token_generator.signer.unsign(token, max_age=300)
+            signed_pk = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
         except (SignatureExpired, BadSignature):
             raise Http404
 
@@ -532,4 +594,19 @@ class IdentityDocumentImageView(views.APIView):
         if not image_field:
             raise Http404
 
-        return FileResponse(image_field.open(), content_type='image/jpeg')
+        try:
+            file_handle = image_field.open()
+        except (FileNotFoundError, OSError, ValueError):
+            raise Http404
+
+        # Determine content type from extension instead of hardcoding jpeg
+        ext = image_field.name.lower().rsplit('.', 1)[-1] if '.' in image_field.name else 'jpeg'
+        mime_map = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp',
+        }
+        content_type = mime_map.get(ext, 'image/jpeg')
+
+        return FileResponse(file_handle, content_type=content_type)

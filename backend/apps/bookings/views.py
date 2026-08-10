@@ -17,6 +17,7 @@ from apps.bookings.serializers import (
     AssignmentHistorySerializer, UnitAssignmentSerializer,
 )
 from apps.core import services as notify
+from apps.core.services import create_audit_log
 from apps.vehicles.models import Vehicle, VehicleUnit
 
 logger = logging.getLogger(__name__)
@@ -115,10 +116,13 @@ class BookingViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel(self, request, pk=None):
         booking = self.get_object()
-        if booking.customer != request.user:
+        # Allow both the booking owner and staff to cancel
+        if booking.customer != request.user and not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
         if booking.status not in ['pending_approval', 'approved', 'awaiting_payment']:
             return Response({'detail': 'This booking cannot be cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        before = {'status': booking.status}
 
         with transaction.atomic():
             booking.status = 'cancelled'
@@ -130,6 +134,15 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.status = 'available'
                 booking.vehicle_unit.save()
             booking.save()
+
+        # If cancelled by an admin, create an audit log
+        if request.user.is_staff and booking.customer != request.user:
+            create_audit_log(
+                actor=request.user, action='booking_cancelled', booking=booking,
+                summary=f'Admin cancelled booking {booking.booking_number}: {reason}' if reason else f'Admin cancelled booking {booking.booking_number}',
+                before_state=before, after_state={'status': booking.status},
+                request=request,
+            )
 
         notify.notify_booking_cancelled(booking)
         return Response(BookingSerializer(booking).data)
@@ -144,11 +157,18 @@ class BookingViewSet(viewsets.ModelViewSet):
         if booking.status != 'pending_approval':
             return Response({'detail': 'Only pending bookings can be approved.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        before = {'status': booking.status}
+
         with transaction.atomic():
             booking.status = 'awaiting_payment'
-            # Unit assignment is manual — admin assigns via assign-unit endpoint
             booking.save()
 
+        create_audit_log(
+            actor=request.user, action='booking_approved', booking=booking,
+            summary=f'Approved booking {booking.booking_number}',
+            before_state=before, after_state={'status': booking.status},
+            request=request,
+        )
         notify.notify_booking_approved(booking)
         return Response(BookingSerializer(booking).data)
 
@@ -164,6 +184,8 @@ class BookingViewSet(viewsets.ModelViewSet):
         if not ser.is_valid():
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        before = {'status': booking.status}
+
         with transaction.atomic():
             booking.status = 'rejected'
             booking.rejection_reason = ser.validated_data.get('rejection_reason', '')
@@ -172,6 +194,12 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
+        create_audit_log(
+            actor=request.user, action='booking_rejected', booking=booking,
+            summary=f'Rejected booking {booking.booking_number}: {booking.rejection_reason}',
+            before_state=before, after_state={'status': booking.status},
+            request=request,
+        )
         notify.notify_booking_rejected(booking)
         return Response(BookingSerializer(booking).data)
 
@@ -193,8 +221,8 @@ class BookingViewSet(viewsets.ModelViewSet):
             )
 
         booking = self.get_object()
-        if not request.user.is_staff:
-            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+        if not request.user.is_superuser:
+            return Response({'detail': 'Not authorized. Only superusers can manually confirm payments.'}, status=status.HTTP_403_FORBIDDEN)
         if booking.status != 'awaiting_payment':
             return Response({'detail': 'Booking must be awaiting payment.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -205,7 +233,13 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
-        # Audit log
+        create_audit_log(
+            actor=request.user, action='payment_confirmed', booking=booking,
+            summary=f'Manually confirmed payment for booking {booking.booking_number}',
+            before_state={'status': 'awaiting_payment'},
+            after_state={'status': booking.status},
+            request=request,
+        )
         logger.info(
             'Payment manually confirmed by admin %s (id=%s) for booking %s',
             request.user.email, request.user.id, booking.booking_number,
@@ -226,8 +260,15 @@ class BookingViewSet(viewsets.ModelViewSet):
                 {'detail': 'Only confirmed bookings can be marked waiting.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        before = {'status': booking.status}
         booking.status = 'waiting_for_pickup'
         booking.save()
+        create_audit_log(
+            actor=request.user, action='booking_marked_waiting', booking=booking,
+            summary=f'Marked booking {booking.booking_number} as waiting for pickup',
+            before_state=before, after_state={'status': booking.status},
+            request=request,
+        )
         notify.notify_pickup_reminder(booking)
         return Response(BookingSerializer(booking).data)
 
@@ -242,12 +283,19 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'A vehicle unit must be assigned before activating.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            before = {'status': booking.status, 'unit': booking.vehicle_unit.plate_number if booking.vehicle_unit else None}
             booking.status = 'active'
             booking.handover_time = timezone.now()
             booking.vehicle_unit.status = 'active_rental'
             booking.vehicle_unit.save()
             booking.save()
 
+        create_audit_log(
+            actor=request.user, action='rental_activated', booking=booking,
+            summary=f'Activated rental for booking {booking.booking_number}',
+            before_state=before, after_state={'status': booking.status},
+            request=request,
+        )
         notify.notify_rental_activated(booking)
         return Response(BookingSerializer(booking).data)
 
@@ -268,6 +316,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
+            before = {'status': booking.status, 'return_unit_status': None}
             booking.status = 'completed'
             booking.return_unit_status = return_unit_status
             booking.return_time_actual = timezone.now()
@@ -276,6 +325,12 @@ class BookingViewSet(viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
+        create_audit_log(
+            actor=request.user, action='rental_completed', booking=booking,
+            summary=f'Completed booking {booking.booking_number} (unit status: {return_unit_status})',
+            before_state=before, after_state={'status': booking.status, 'return_unit_status': return_unit_status},
+            request=request,
+        )
         notify.notify_vehicle_returned(booking)
         notify.notify_transaction_completed(booking)
         return Response(BookingSerializer(booking).data)
@@ -296,15 +351,22 @@ class BookingViewSet(viewsets.ModelViewSet):
         if not unit_id:
             return Response({'detail': 'unit_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            unit = VehicleUnit.objects.select_for_update().get(pk=unit_id, vehicle=booking.vehicle)
-        except VehicleUnit.DoesNotExist:
-            return Response({'detail': 'Vehicle unit not found or does not belong to this vehicle model.'}, status=status.HTTP_404_NOT_FOUND)
+        before = {
+            'unit_plate': booking.vehicle_unit.plate_number if booking.vehicle_unit else None,
+        }
 
-        if unit.status != 'available':
-            return Response({'detail': f'Unit {unit.plate_number} is not available (status: {unit.get_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
-
+        # Lock both the booking and the target unit to prevent race conditions
+        # between two admins assigning units to the same booking simultaneously.
         with transaction.atomic():
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            try:
+                unit = VehicleUnit.objects.select_for_update().get(pk=unit_id, vehicle=booking.vehicle)
+            except VehicleUnit.DoesNotExist:
+                return Response({'detail': 'Vehicle unit not found or does not belong to this vehicle model.'}, status=status.HTTP_404_NOT_FOUND)
+
+            if unit.status != 'available':
+                return Response({'detail': f'Unit {unit.plate_number} is not available (status: {unit.get_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
+
             previous_unit = booking.vehicle_unit
             previous_plate = previous_unit.plate_number if previous_unit else None
 
@@ -325,6 +387,17 @@ class BookingViewSet(viewsets.ModelViewSet):
                 reason=reason,
                 changed_by=request.user,
             )
+
+            after = {'unit_plate': unit.plate_number}
+
+        action_type = 'unit_changed' if previous_plate else 'unit_assigned'
+        create_audit_log(
+            actor=request.user, action=action_type, booking=booking,
+            summary=f'{"Changed" if previous_plate else "Assigned"} unit for booking {booking.booking_number}: '
+                    f'{"None" if not previous_plate else previous_plate} → {unit.plate_number}',
+            before_state=before, after_state=after,
+            request=request,
+        )
 
         if previous_plate:
             notify.notify_unit_changed(booking, previous_plate, unit.plate_number, reason)
@@ -433,18 +506,24 @@ class CustomerDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from django.db.models import Count
+
+        # Use DB-level aggregation for summary counts (O(1) query)
+        summary_qs = (
+            Booking.objects
+            .filter(customer=request.user)
+            .values('status')
+            .annotate(count=Count('id'))
+        )
+        summary = {item['status']: item['count'] for item in summary_qs}
+
         bookings = Booking.objects.filter(
             customer=request.user,
-        ).select_related('vehicle')
+        ).select_related('vehicle').order_by('-created_at')
         serializer = DashboardBookingSerializer(bookings, many=True)
 
-        groups = {}
-        for key in ['pending_approval', 'approved', 'awaiting_payment', 'confirmed',
-                     'waiting_for_pickup', 'active', 'completed', 'cancelled', 'rejected']:
-            groups[key] = [b for b in serializer.data if b['status'] == key]
-
         return Response({
-            'summary': {key: len(v) for key, v in groups.items()},
+            'summary': summary,
             'total': len(serializer.data),
             'bookings': serializer.data,
         })
@@ -454,22 +533,25 @@ class AdminDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from django.db.models import Count
+
         if not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
 
-        bookings = Booking.objects.select_related('customer', 'vehicle').all()
+        # Use DB-level aggregation for summary counts (O(1) query)
+        summary_qs = (
+            Booking.objects
+            .values('status')
+            .annotate(count=Count('id'))
+        )
+        summary = {item['status']: item['count'] for item in summary_qs}
+        summary['total'] = sum(summary.values())
+
+        bookings = Booking.objects.select_related('customer', 'vehicle').order_by('-created_at')
         serializer = AdminDashboardBookingSerializer(bookings, many=True)
 
-        groups = {}
-        for key in ['pending_approval', 'approved', 'awaiting_payment', 'confirmed',
-                     'waiting_for_pickup', 'active', 'completed', 'cancelled', 'rejected']:
-            groups[key] = [b for b in serializer.data if b['status'] == key]
-
-        summary_data = {key: len(v) for key, v in groups.items()}
-        summary_data['total'] = len(serializer.data)
-
         return Response({
-            'summary': summary_data,
+            'summary': summary,
             'total': len(serializer.data),
             'bookings': serializer.data,
         })

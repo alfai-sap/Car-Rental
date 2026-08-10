@@ -42,6 +42,7 @@ class VehicleAPITests(TestCase):
         self.admin = User.objects.create_superuser(
             email='admin@test.com', username='admin',
             password='AdminPass123!',
+            is_verified=True,
         )
         self.vehicle = Vehicle.objects.create(
             make='Toyota', model='Vios', year=2024, type='sedan',
@@ -126,6 +127,7 @@ class VehicleImageAPITests(TestCase):
         self.admin = User.objects.create_superuser(
             email='admin@test.com', username='admin',
             password='AdminPass123!',
+            is_verified=True,
         )
         self.vehicle = Vehicle.objects.create(
             make='Toyota', model='Vios', year=2024, type='sedan',

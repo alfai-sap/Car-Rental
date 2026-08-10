@@ -119,12 +119,8 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@carrental.com')
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -180,6 +176,7 @@ REST_FRAMEWORK = {
         'password_reset': '3/minute',
         'verification_resend': '3/minute',
         'payment_checkout': '5/minute',
+        'identity_doc_image': '30/minute',
     },
     'EXCEPTION_HANDLER': 'apps.core.exception_handler.custom_exception_handler',
 }

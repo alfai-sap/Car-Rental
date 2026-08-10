@@ -18,7 +18,7 @@ class User(AbstractUser):
 
 
 class IdentityDocument(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='identity_documents')
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='identity_documents')
     document_type = models.CharField(max_length=50)  # e.g. 'drivers_license', 'passport', 'national_id'
     document_number = models.CharField(max_length=50)
     front_image = models.ImageField(
