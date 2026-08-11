@@ -104,6 +104,16 @@ class PaymentCreateSessionView(APIView):
                     'due_date': timezone.now().date() + timedelta(days=3),
                 },
             )
+            # Always sync invoice totals to booking for re-attempt scenarios
+            if invoice.invoice_status != Invoice.STATUS_PAID:
+                needs_sync = (
+                    invoice.subtotal != booking.subtotal
+                    or invoice.total != booking.estimated_total
+                )
+                if needs_sync:
+                    invoice.subtotal = booking.subtotal
+                    invoice.total = booking.estimated_total
+                    invoice.save(update_fields=['subtotal', 'total', 'updated_at'])
 
             payment = Payment.objects.create(
                 booking=booking,
@@ -231,8 +241,9 @@ class PaymentWebhookView(APIView):
             logger.info('PayMongo webhook: duplicate event %s ignored', event_id)
             return Response({'detail': 'Event already processed.'})
 
-        # ── 4. Only handle payment success events ──
-        if event_type != 'payment.paid':
+        # ── 4. Dispatch by event type ──
+        handled_types = {'payment.paid', 'payment.failed', 'payment.expired'}
+        if event_type not in handled_types:
             logger.info('PayMongo webhook: unhandled event type %s', event_type)
             return Response({'detail': f'Event type {event_type} acknowledged.'})
 
@@ -253,8 +264,11 @@ class PaymentWebhookView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ── 6. Process payment and update booking status ──
-        with transaction.atomic():
+        booking = payment.booking
+        payment.raw_payload = request.data
+        payment.webhook_event_id = event_id
+
+        if event_type == 'payment.paid':
             payment.payment_status = Payment.STATUS_PAID
             payment.paid_at = timezone.now()
             payment.payment_method = (
@@ -263,31 +277,51 @@ class PaymentWebhookView(APIView):
                 .get('source', {})
                 .get('type', '')
             )
-            payment.raw_payload = request.data
-            payment.webhook_event_id = event_id
-            payment.save()
 
-            booking = payment.booking
-            booking.status = 'confirmed'
-            if booking.vehicle_unit:
-                booking.vehicle_unit.status = 'booked'
-                booking.vehicle_unit.save()
-            booking.save()
+            with transaction.atomic():
+                payment.save()
+                booking.status = 'confirmed'
+                if booking.vehicle_unit:
+                    booking.vehicle_unit.status = 'booked'
+                    booking.vehicle_unit.save()
+                booking.save()
+                if payment.invoice:
+                    payment.invoice.invoice_status = Invoice.STATUS_PAID
+                    payment.invoice.save()
 
-            if payment.invoice:
-                payment.invoice.invoice_status = Invoice.STATUS_PAID
-                payment.invoice.save()
+            notify.notify_payment_successful(booking)
+            notify.notify_booking_confirmed(booking)
+            logger.info(
+                'PayMongo webhook: payment %s confirmed for booking %s',
+                payment.payment_number, booking.booking_number,
+            )
+            return Response({'detail': 'Payment processed successfully.'})
 
-        notify.notify_payment_successful(booking)
-        notify.notify_booking_confirmed(booking)
+        elif event_type == 'payment.failed':
+            with transaction.atomic():
+                payment.payment_status = Payment.STATUS_FAILED
+                payment.save()
+                # Booking stays in awaiting_payment so customer can retry
 
-        logger.info(
-            'PayMongo webhook: payment %s confirmed for booking %s',
-            payment.payment_number,
-            booking.booking_number,
-        )
+            notify.notify_payment_failed(booking)
+            logger.info(
+                'PayMongo webhook: payment %s failed for booking %s',
+                payment.payment_number, booking.booking_number,
+            )
+            return Response({'detail': 'Payment failure recorded.'})
 
-        return Response({'detail': 'Payment processed successfully.'})
+        elif event_type == 'payment.expired':
+            with transaction.atomic():
+                payment.payment_status = Payment.STATUS_EXPIRED
+                payment.save()
+                # Booking stays in awaiting_payment — customer should re-initiate
+
+            notify.notify_payment_failed(booking)
+            logger.info(
+                'PayMongo webhook: payment %s expired for booking %s',
+                payment.payment_number, booking.booking_number,
+            )
+            return Response({'detail': 'Payment expiry recorded.'})
 
     def _verify_signature(self, body: bytes, signature: str) -> bool:
         """Verify PayMongo HMAC-SHA256 webhook signature with replay protection.

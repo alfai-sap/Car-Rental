@@ -217,6 +217,7 @@ REST_FRAMEWORK = {
         'verification_resend': '3/minute',
         'payment_checkout': '5/minute',
         'identity_doc_image': '30/minute',
+        'registration': '5/minute',
     },
     'EXCEPTION_HANDLER': 'apps.core.exception_handler.custom_exception_handler',
 }

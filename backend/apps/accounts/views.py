@@ -107,6 +107,7 @@ class RegisterView(views.APIView):
     observing the API response.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'registration'
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -285,6 +286,7 @@ class MeView(views.APIView):
 
 class IdentityDocumentUploadView(views.APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'identity_doc_image'
     parser_classes = [MultiPartParser, FormParser]
 
     # Prevent disk-abuse by limiting each user to a reasonable number of identity documents

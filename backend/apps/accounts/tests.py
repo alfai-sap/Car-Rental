@@ -1,6 +1,7 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from rest_framework.test import APIClient
 from rest_framework import status
 
@@ -19,6 +20,8 @@ class RegisterTests(TestCase):
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
         }
+        # Clear throttle cache so each test starts with a fresh rate limit
+        cache.clear()
 
     def test_register_creates_user(self):
         response = self.client.post(self.url, self.valid_payload, format='json')

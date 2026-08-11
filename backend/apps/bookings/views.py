@@ -3,7 +3,7 @@ import logging
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -95,6 +95,39 @@ class BookingViewSet(viewsets.ModelViewSet):
             # lock is released immediately when the queryset is discarded.
             vehicle = serializer.validated_data['vehicle']
             locked_vehicle = Vehicle.objects.select_for_update().get(pk=vehicle.pk)
+
+            pickup_date = serializer.validated_data['pickup_date']
+            return_date = serializer.validated_data['return_date']
+
+            # Re-check availability inside the lock to close the TOCTOU window
+            # between serializer.validate() and the atomic block.
+            total = VehicleUnit.objects.filter(vehicle=locked_vehicle).count()
+            if total == 0:
+                raise serializers.ValidationError({
+                    'vehicle': 'No units available for this vehicle. Please contact the administrator.',
+                })
+
+            booked_unit_ids = Booking.objects.filter(
+                vehicle=locked_vehicle,
+                vehicle_unit__isnull=False,
+                status__in=['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active'],
+                pickup_date__lt=return_date,
+                return_date__gt=pickup_date,
+            ).values_list('vehicle_unit_id', flat=True)
+
+            unavailable_ids = VehicleUnit.objects.filter(
+                vehicle=locked_vehicle, status__in=['maintenance', 'inactive'],
+            ).values_list('id', flat=True)
+
+            blocked = set(booked_unit_ids) | set(unavailable_ids)
+            available = total - VehicleUnit.objects.filter(
+                vehicle=locked_vehicle, id__in=blocked,
+            ).count()
+
+            if available <= 0:
+                raise serializers.ValidationError({
+                    'vehicle': 'No units available for the selected dates.',
+                })
 
             snapshot = _build_identity_snapshot(self.request.user)
 

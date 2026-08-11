@@ -36,9 +36,12 @@ class Invoice(models.Model):
     def save(self, *args, **kwargs):
         if not self.invoice_number:
             self.invoice_number = f'INV-{uuid.uuid4().hex[:8].upper()}'
-        self.total = (self.subtotal or 0) + (self.additional_charges or 0) - (self.discount or 0)
-        if self.total < 0:
-            self.total = 0
+        # Only recalculate total for unpaid invoices to prevent
+        # paid invoices from changing after the fact.
+        if self.invoice_status != self.STATUS_PAID:
+            self.total = (self.subtotal or 0) + (self.additional_charges or 0) - (self.discount or 0)
+            if self.total < 0:
+                self.total = 0
         super().save(*args, **kwargs)
 
 
