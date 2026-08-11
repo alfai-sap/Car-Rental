@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import {
   Bell, CheckCircle, XCircle, Clock, AlertCircle,
-  CreditCard, Car,
+  CreditCard, Car, ChevronLeft, ChevronRight,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
@@ -28,6 +28,19 @@ const loading = ref(true)
 const error = ref('')
 const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
+
+// ── Pagination ──
+const PER_PAGE = 10
+const currentPage = ref(1)
+const totalCount = ref(0)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / PER_PAGE)))
+
+function goToPage(page: number) {
+  if (page < 1 || page > totalPages.value) return
+  currentPage.value = page
+  fetchNotifications()
+}
 
 function notificationIcon(type: string) {
   switch (type) {
@@ -97,17 +110,24 @@ async function markAllRead() {
   } catch { /* ignore */ }
 }
 
-onMounted(async () => {
+async function fetchNotifications() {
+  loading.value = true
+  const offset = (currentPage.value - 1) * PER_PAGE
   try {
-    const response = await api.get('/notifications/')
+    const response = await api.get(`/notifications/?limit=${PER_PAGE}&offset=${offset}`)
     notifications.value = response.data.notifications
     unreadCount.value = response.data.unread_count || 0
+    totalCount.value = response.data.count || 0
     auth.unreadNotificationCount = unreadCount.value
   } catch {
     error.value = 'Failed to load notifications.'
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  fetchNotifications()
 })
 </script>
 
@@ -147,8 +167,8 @@ onMounted(async () => {
           :class="{ 'border-l-4 border-l-blue-500': !notif.is_read }"
         >
           <RouterLink
-            v-if="notif.booking_id"
-            :to="`/transactions/${notif.booking_id}`"
+            v-if="notif.link"
+            :to="notif.link"
             class="block"
           >
             <div class="flex items-start gap-3">
@@ -181,6 +201,33 @@ onMounted(async () => {
               </p>
             </div>
           </div>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-4">
+          <button
+            @click="goToPage(currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="h-8 w-8 rounded flex items-center justify-center text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft class="h-4 w-4" />
+          </button>
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            @click="goToPage(page)"
+            class="h-8 w-8 rounded text-sm font-medium transition-colors"
+            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+          >
+            {{ page }}
+          </button>
+          <button
+            @click="goToPage(currentPage + 1)"
+            :disabled="currentPage === totalPages"
+            class="h-8 w-8 rounded flex items-center justify-center text-zinc-500 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight class="h-4 w-4" />
+          </button>
         </div>
       </div>
     </main>

@@ -31,8 +31,10 @@ class Booking(models.Model):
     )
     vehicle = models.ForeignKey(
         'vehicles.Vehicle',
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
         related_name='bookings',
+        help_text='Original vehicle.  Preserved for audit even if the vehicle is later removed from the fleet.',
     )
     vehicle_unit = models.ForeignKey(
         'vehicles.VehicleUnit',
@@ -78,8 +80,8 @@ class Booking(models.Model):
         # not explicitly provided (None / 0).  On subsequent saves,
         # use update_fields to avoid overwriting stored values.
         if is_new:
-            if self.return_date <= self.pickup_date:
-                raise ValidationError('Return date must be after pickup date.')
+            if self.return_date < self.pickup_date:
+                raise ValidationError('Return date must be on or after pickup date.')
             if self.rental_days is None or not self.rental_days:
                 self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
             if self.subtotal is None:
@@ -103,7 +105,9 @@ class AssignmentHistory(models.Model):
         related_name='previous_assignments',
     )
     new_unit = models.ForeignKey(
-        'vehicles.VehicleUnit', on_delete=models.PROTECT, related_name='new_assignments',
+        'vehicles.VehicleUnit', on_delete=models.SET_NULL, null=True,
+        related_name='new_assignments',
+        help_text='Assigned unit. Preserved for audit even if the unit is later removed.',
     )
     reason = models.CharField(max_length=255)
     changed_by = models.ForeignKey(

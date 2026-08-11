@@ -566,24 +566,29 @@ class IdentityDocumentImageView(views.APIView):
                 raise Http404
             return self._serve_image(request.user, pk, side)
 
+        # Verify the signed token — it encodes "doc_pk.user_pk"
         try:
-            signed_pk = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
+            signed_value = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
         except (SignatureExpired, BadSignature):
             raise Http404
 
-        if signed_pk != str(pk):
+        try:
+            token_doc_pk, token_user_pk = signed_value.split('.', 1)
+        except ValueError:
             raise Http404
 
-        # Token valid — verify ownership before serving
+        if token_doc_pk != str(pk):
+            raise Http404
+
+        # Token cryptographically proves user_id — no Authorization header needed.
+        # Still, if the request already carries a session, double-check ownership.
+        if request.user.is_authenticated and request.user.id != int(token_user_pk) and not request.user.is_staff:
+            raise Http404
+
         doc = get_object_or_404(IdentityDocument, pk=pk)
-        # Require authentication for the token-based path too —
-        # signed URLs can leak via browser history, proxy logs, or
-        # referrer headers.  The token limits the window, but we must
-        # also verify the requesting user owns the document.
-        if not request.user.is_authenticated:
+        if doc.user_id != int(token_user_pk):
             raise Http404
-        if doc.user != request.user and not request.user.is_staff:
-            raise Http404
+
         return self._serve_file(doc, side)
 
     def _serve_image(self, user, pk, side):

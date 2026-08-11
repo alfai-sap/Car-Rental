@@ -154,7 +154,9 @@ function statusBadgeClass(status: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+  // Handle both date-only ("2026-08-11") and ISO ("2026-08-11T20:23:04Z") formats
+  const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00')
+  return date.toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
 }
@@ -243,8 +245,15 @@ async function fetchDashboard() {
     bookings.value = response.data.bookings
     isAdmin.value = true
   } catch (err: unknown) {
-    if ((err as { response?: { status?: number } })?.response?.status === 403) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || ''
+    if (status === 403) {
       isAdmin.value = false
+      error.value = detail || 'You do not have administrator privileges. Please log in with an admin account.'
+    } else if (status === 401) {
+      error.value = 'Your session has expired. Please log in again.'
+    } else {
+      error.value = 'Failed to load dashboard. Please try again.'
     }
   }
 }

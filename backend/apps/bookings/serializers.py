@@ -63,7 +63,7 @@ class BookingSerializer(serializers.ModelSerializer):
         docs = obj.customer.identity_documents.all()
         result = []
         for doc in docs:
-            token = _identity_image_token(doc.id)
+            token = _identity_image_token(doc.id, doc.user_id)
             item = {
                 'id': doc.id,
                 'document_type': doc.document_type,
@@ -126,7 +126,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
         if pickup_date and return_date:
             if return_date < pickup_date:
-                raise serializers.ValidationError({'return_date': 'Return date must be after pickup date.'})
+                raise serializers.ValidationError({'return_date': 'Return date must be on or after pickup date.'})
             if pickup_date < timezone.now().date():
                 raise serializers.ValidationError({'pickup_date': 'Pickup date cannot be in the past.'})
 

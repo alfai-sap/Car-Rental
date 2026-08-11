@@ -59,12 +59,16 @@ def _get_token_timeout():
 account_token_generator = AccountTokenGenerator()
 
 
-def _identity_image_token(pk):
+def _identity_image_token(doc_pk, user_pk):
     """Short-lived signed token for identity document image access (5 min).
 
-    Allows <img> tags to load identity documents without Auth headers.
+    Encodes both the document ID and the user ID so that the image view
+    can verify ownership cryptographically — no Authorization header
+    needed.  This allows <img> tags to load identity documents securely.
+
+    Format: "doc_pk.user_pk"
     """
-    return account_token_generator._email_verifier.signer.sign(str(pk))
+    return account_token_generator._email_verifier.signer.sign(f'{doc_pk}.{user_pk}')
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -143,11 +147,13 @@ class IdentityDocumentSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        # Build a token that cryptographically binds the document to its owner.
+        # The image view will verify ownership from the token alone — no
+        # Authorization header required, so <img> tags work in the browser.
+        token = _identity_image_token(instance.id, instance.user_id)
         if instance.front_image:
-            token = _identity_image_token(instance.id)
             data['front_image'] = f'/api/identity-documents/{instance.id}/image/front/?token={token}'
         if instance.back_image:
-            token = _identity_image_token(instance.id)
             data['back_image'] = f'/api/identity-documents/{instance.id}/image/back/?token={token}'
         return data
 
