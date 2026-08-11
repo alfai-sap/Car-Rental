@@ -368,7 +368,7 @@ class PasswordResetRequestView(views.APIView):
                 f"We received a request to reset your password for your Car Rental account.\n\n"
                 f"Copy and paste the link below into your browser to reset it:\n"
                 f"{reset_url}\n\n"
-                f"This link will expire in 5 minutes.\n\n"
+                f"This link will expire in 15 minutes.\n\n"
                 f"If you did not request a password reset, please ignore this email.\n\n"
                 f"– Car Rental Team"
             )
@@ -417,7 +417,7 @@ class LogoutView(views.APIView):
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh')
+            refresh_token = request.COOKIES.get('refresh_token', '') or request.data.get('refresh')
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
@@ -574,8 +574,16 @@ class IdentityDocumentImageView(views.APIView):
         if signed_pk != str(pk):
             raise Http404
 
-        # Token valid — serve the image
+        # Token valid — verify ownership before serving
         doc = get_object_or_404(IdentityDocument, pk=pk)
+        # Require authentication for the token-based path too —
+        # signed URLs can leak via browser history, proxy logs, or
+        # referrer headers.  The token limits the window, but we must
+        # also verify the requesting user owns the document.
+        if not request.user.is_authenticated:
+            raise Http404
+        if doc.user != request.user and not request.user.is_staff:
+            raise Http404
         return self._serve_file(doc, side)
 
     def _serve_image(self, user, pk, side):

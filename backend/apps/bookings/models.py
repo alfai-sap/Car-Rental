@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
-
+from django.core.exceptions import ValidationError
 
 class Booking(models.Model):
     STATUS_CHOICES = [
@@ -79,7 +79,7 @@ class Booking(models.Model):
         # use update_fields to avoid overwriting stored values.
         if is_new:
             if self.return_date <= self.pickup_date:
-                raise ValueError('Return date must be after pickup date.')
+                raise ValidationError('Return date must be after pickup date.')
             if self.rental_days is None or not self.rental_days:
                 self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
             if self.subtotal is None:
