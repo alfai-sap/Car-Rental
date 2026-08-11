@@ -98,6 +98,7 @@ debug_log.txt
 *.bak
 *.tmp
 *.temp
+ProductionGuide.md
 
 # ============================================
 # Agent markdowns

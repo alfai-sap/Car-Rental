@@ -24,8 +24,7 @@ async function handleLogout() {
 }
 
 onMounted(async () => {
-  const token = localStorage.getItem('access_token')
-  if (token && !auth.user) {
+  if (!auth.user) {
     await auth.fetchUser()
   }
   await auth.fetchUnreadCount()
@@ -57,7 +56,7 @@ onMounted(async () => {
             </div>
             <!-- Unread notification badge -->
             <span
-              v-if="unreadNotifications > 0"
+              v-if="auth.unreadNotificationCount > 0"
               class="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
             >
               {{ auth.unreadNotificationCount > 99 ? '99+' : auth.unreadNotificationCount }}
@@ -105,8 +104,8 @@ onMounted(async () => {
                   @click="closeDropdown"
                 >
                   <span>Notifications</span>
-                  <span v-if="unreadNotifications > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
-                    {{ unreadNotifications }}
+                  <span v-if="auth.unreadNotificationCount > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {{ auth.unreadNotificationCount > 99 ? '99+' : auth.unreadNotificationCount }}
                   </span>
                 </RouterLink>
                 <button
@@ -130,8 +129,8 @@ onMounted(async () => {
                   @click="closeDropdown"
                 >
                   <span>Notifications</span>
-                  <span v-if="unreadNotifications > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
-                    {{ unreadNotifications }}
+                  <span v-if="auth.unreadNotificationCount > 0" class="bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {{ auth.unreadNotificationCount > 99 ? '99+' : auth.unreadNotificationCount }}
                   </span>
                 </RouterLink>
                 <RouterLink

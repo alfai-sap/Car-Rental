@@ -1,4 +1,5 @@
-from django.db import connections
+from django.db import connections, models
+from django.db.models import Q
 from django.db.utils import OperationalError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -70,9 +71,9 @@ class AuditLogListView(APIView):
         search = request.query_params.get('search', '').strip()
         if search:
             qs = qs.filter(
-                models.Q(summary__icontains=search)
-                | models.Q(actor__email__icontains=search)
-                | models.Q(booking__booking_number__icontains=search)
+                Q(summary__icontains=search)
+                | Q(actor__email__icontains=search)
+                | Q(booking__booking_number__icontains=search)
             )
 
         # ── Pagination ──
@@ -95,7 +96,6 @@ class AuditLogListView(APIView):
 
         # ── Action stats for summary bar ──
         from django.db.models import Count
-        from django.db import models
         stats_qs = qs.values('action').annotate(count=Count('id'))
         action_stats = {item['action']: item['count'] for item in stats_qs}
 

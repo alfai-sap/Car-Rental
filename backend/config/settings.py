@@ -148,6 +148,10 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = os.getenv('SECURE_REFERRER_POLICY', 'same-origin')
     X_FRAME_OPTIONS = 'DENY'
 
+# Upload limits — protect against large request bodies
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
 
 # Admin URL — configurable for security (default: 'admin/')
@@ -165,9 +169,30 @@ if not DEBUG:
             'CSRF_TRUSTED_ORIGINS must be set when DEBUG=False. '
             'Set it in your .env file (e.g. CSRF_TRUSTED_ORIGINS=https://yourdomain.com).'
         )
+    if CORS_ALLOW_ALL_ORIGINS:
+        raise ImproperlyConfigured(
+            'CORS_ALLOW_ALL_ORIGINS must be False when DEBUG=False. '
+            'Set CORS_ALLOWED_ORIGINS to your frontend origin instead.'
+        )
 
-# Password Reset — 5 minute expiry
-PASSWORD_RESET_TIMEOUT = 300
+# ── Startup validation: PayMongo configuration ──
+if PAYMENT_PROVIDER == 'paymongo':
+    missing = []
+    if not PAYMONGO_PUBLIC_KEY:
+        missing.append('PAYMONGO_PUBLIC_KEY')
+    if not PAYMONGO_SECRET_KEY:
+        missing.append('PAYMONGO_SECRET_KEY')
+    if not PAYMONGO_WEBHOOK_SECRET:
+        missing.append('PAYMONGO_WEBHOOK_SECRET')
+    if missing:
+        raise ImproperlyConfigured(
+            f'PAYMENT_PROVIDER is set to "paymongo" but the following '
+            f'environment variables are missing: {", ".join(missing)}. '
+            'Set them in your .env file or switch PAYMENT_PROVIDER to "disabled".'
+        )
+
+# Password Reset — 15 minute expiry
+PASSWORD_RESET_TIMEOUT = 900
 
 # REST Framework
 REST_FRAMEWORK = {
