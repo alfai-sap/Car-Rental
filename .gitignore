@@ -98,3 +98,8 @@ debug_log.txt
 *.bak
 *.tmp
 *.temp
+
+# ============================================
+# Agent markdowns
+# ============================================
+instructions_agents/
