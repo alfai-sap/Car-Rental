@@ -139,8 +139,8 @@ class TokenRefreshTests(TestCase):
     def test_token_refresh_invalid_fails(self):
         self.client.cookies['refresh_token'] = 'invalid-token'
         response = self.client.post('/api/auth/token/refresh/', {}, format='json')
-        # CookieTokenRefreshView returns 400 for invalid/expired tokens
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # CookieTokenRefreshView returns 401 for invalid/expired tokens
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class LogoutTests(TestCase):
@@ -167,7 +167,7 @@ class LogoutTests(TestCase):
         # Verify token is blacklisted — refresh via cookie should fail
         self.client.cookies['refresh_token'] = str(refresh)
         refresh_resp = self.client.post('/api/auth/token/refresh/', {}, format='json')
-        self.assertEqual(refresh_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(refresh_resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_logout_unauthenticated_fails(self):
         response = self.client.post('/api/auth/logout/', {}, format='json')

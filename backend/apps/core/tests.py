@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -54,7 +54,7 @@ class NotificationAPITests(TestCase):
         )
         self.admin = User.objects.create_user(
             email='admin@test.com', username='admin', password='Admin123!',
-            is_staff=True, is_verified=True,
+            is_staff=True, is_superuser=True, is_verified=True,
         )
         self.vehicle = Vehicle.objects.create(
             make='Toyota', model='Vios', year=2024, type='sedan',
@@ -70,10 +70,8 @@ class NotificationAPITests(TestCase):
         )
 
     def _login(self, user):
-        resp = self.client.post('/api/auth/login/', {
-            'email': user.email, 'password': 'Pass123!' if not user.is_staff else 'Admin123!',
-        }, format='json')
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        # Use force_authenticate to avoid login rate-limit in tests
+        self.client.force_authenticate(user=user)
 
     def _create_booking(self, customer=None):
         cust = customer or self.customer

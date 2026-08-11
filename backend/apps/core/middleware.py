@@ -1,6 +1,10 @@
 """
 Security headers middleware — adds CSP, Permissions-Policy, and other
 hardening headers to every response.
+
+All header values are resolved at call time (not at startup), so
+changing settings (e.g. via env vars in production) takes effect
+without a server restart.
 """
 from django.conf import settings
 
@@ -14,19 +18,35 @@ class SecurityHeadersMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
 
-        # Content Security Policy — defence against XSS, data injection
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "font-src 'self'; "
-            "connect-src 'self'; "
-            "frame-src https://paymongo.com https://pm.paymongo.com; "
-            "form-action 'self'; "
-            "base-uri 'self'; "
-            "object-src 'none'"
-        )
+        # ── Content Security Policy ──
+        # In DEBUG mode we relax script-src for HMR (Vite dev server).
+        # In production we lock down to 'self' only.
+        if settings.DEBUG:
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self'; "
+                "connect-src 'self' ws://localhost:* http://localhost:*; "
+                "frame-src https://paymongo.com https://pm.paymongo.com; "
+                "form-action 'self'; "
+                "base-uri 'self'; "
+                "object-src 'none'"
+            )
+        else:
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self'; "
+                "connect-src 'self'; "
+                "frame-src https://paymongo.com https://pm.paymongo.com; "
+                "form-action 'self'; "
+                "base-uri 'self'; "
+                "object-src 'none'"
+            )
         response['Content-Security-Policy'] = csp
 
         # Permission Policy — restrict browser features
@@ -41,6 +61,13 @@ class SecurityHeadersMiddleware:
         # but extra hardening never hurts)
         response['Cross-Origin-Opener-Policy'] = 'same-origin'
         response['Cross-Origin-Resource-Policy'] = 'same-origin'
+
+        # ── Additional production-only headers ──
+        if not settings.DEBUG:
+            # Tell browsers to always check for certificate revocation
+            response['Expect-CT'] = 'max-age=86400, enforce'
+            # DNS prefetch control
+            response['X-DNS-Prefetch-Control'] = 'off'
 
         # Cache control for API responses only — prevents caching of sensitive data
         # while allowing browsers to cache static assets normally.

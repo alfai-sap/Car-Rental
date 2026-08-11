@@ -105,12 +105,11 @@ USE_TZ = True
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 
-# Email
-# if DEBUG:
-#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# else:
-#     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# Email — console in dev (no SMTP needed), SMTP in production
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
@@ -150,6 +149,22 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
+
+# Admin URL — configurable for security (default: 'admin/')
+ADMIN_URL = os.getenv('ADMIN_URL', 'admin/').strip().rstrip('/') + '/'
+
+# ── Startup validation: critical production settings ──
+if not DEBUG:
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            'ALLOWED_HOSTS must be set when DEBUG=False. '
+            'Set it in your .env file (e.g. ALLOWED_HOSTS=yourdomain.com).'
+        )
+    if not CSRF_TRUSTED_ORIGINS:
+        raise ImproperlyConfigured(
+            'CSRF_TRUSTED_ORIGINS must be set when DEBUG=False. '
+            'Set it in your .env file (e.g. CSRF_TRUSTED_ORIGINS=https://yourdomain.com).'
+        )
 
 # Password Reset — 5 minute expiry
 PASSWORD_RESET_TIMEOUT = 300

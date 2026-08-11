@@ -51,10 +51,8 @@ class VehicleAPITests(TestCase):
         )
 
     def _login_admin(self):
-        resp = self.client.post('/api/auth/login/', {
-            'email': 'admin@test.com', 'password': 'AdminPass123!',
-        }, format='json')
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        # Use force_authenticate to avoid login rate-limit in tests
+        self.client.force_authenticate(user=self.admin)
 
     def test_list_vehicles_public(self):
         response = self.client.get('/api/vehicles/')
@@ -135,10 +133,8 @@ class VehicleImageAPITests(TestCase):
         )
 
     def _login_admin(self):
-        resp = self.client.post('/api/auth/login/', {
-            'email': 'admin@test.com', 'password': 'AdminPass123!',
-        }, format='json')
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {resp.data['access']}")
+        # Use force_authenticate to avoid login rate-limit in tests
+        self.client.force_authenticate(user=self.admin)
 
     def test_upload_image_admin(self):
         self._login_admin()
