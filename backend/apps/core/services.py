@@ -258,6 +258,58 @@ def notify_payment_failed(booking):
     )
 
 
+def notify_payment_expired(booking):
+    msg = (
+        f"Your payment for {_vehicle_name(booking)} has expired. "
+        f"You can request a new payment attempt from your booking details."
+    )
+    create_notification(
+        user=booking.customer, notification_type='payment_failed',
+        title='Payment Expired — Request a New Attempt', message=msg,
+        booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='payment_failed',
+        title=f'Payment Expired: {booking.booking_number}',
+        message=(
+            f"Payment for {booking.customer.first_name} {booking.customer.last_name}'s "
+            f"booking of {_vehicle_name(booking)} has expired."
+        ),
+        booking=booking, link=_admin_link(booking),
+    )
+
+
+def notify_repayment_requested(booking):
+    msg = (
+        f"{booking.customer.first_name} {booking.customer.last_name} has requested "
+        f"a new payment attempt for booking {booking.booking_number}."
+    )
+    create_admin_notification(
+        notification_type='payment_required',
+        title=f'Repayment Requested: {booking.booking_number}',
+        message=msg,
+        booking=booking, link=_admin_link(booking),
+    )
+
+
+def notify_repayment_approved(booking):
+    msg = f"Your request for a new payment attempt for {_vehicle_name(booking)} has been approved. Please complete payment."
+    create_notification(
+        user=booking.customer, notification_type='payment_required',
+        title='New Payment Approved', message=msg,
+        booking=booking, link=_booking_link(booking),
+    )
+
+
+def notify_repayment_rejected(booking):
+    msg = f"Your request for a new payment attempt for {_vehicle_name(booking)} was rejected and your booking has been cancelled."
+    create_notification(
+        user=booking.customer, notification_type='booking_rejected',
+        title='Repayment Request Rejected', message=msg,
+        booking=booking, link=_booking_link(booking),
+    )
+
+
 def notify_booking_confirmed(booking):
     msg = f"Your booking #{booking.booking_number} for {_vehicle_name(booking)} is now confirmed."
     create_notification(

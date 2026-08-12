@@ -95,7 +95,15 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
-        username = validated_data['email'].split('@')[0]
+        base_username = validated_data['email'].split('@')[0]
+        username = base_username
+        # Avoid UNIQUE constraint collisions when two users share the same
+        # email local-part (e.g. john@gmail.com and john@yahoo.com).
+        # Retry with incrementing suffixes until we find a free username.
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            username = f'{base_username}{suffix}'
+            suffix += 1
         user = User.objects.create_user(username=username, is_active=True, **validated_data)
         return user
 
@@ -140,10 +148,66 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class IdentityDocumentSerializer(serializers.ModelSerializer):
+    # ── Document types with human labels and example placeholders ──
+    # No format validation is enforced on document_number — the example
+    # serves only as a visual guide in the input field placeholder.
+    DOCUMENT_TYPE_CONFIG = {
+        'drivers_license': {
+            'label': "Driver's License",
+            'example': 'ABC12-34-567890',
+        },
+        'passport': {
+            'label': 'Passport',
+            'example': 'A1234567B',
+        },
+        'national_id': {
+            'label': 'National ID (PhilSys)',
+            'example': '1234-5678901-2',
+        },
+        'sss_id': {
+            'label': 'SSS ID',
+            'example': '34-1234567-8',
+        },
+        'umid': {
+            'label': 'UMID (Unified Multi-Purpose ID)',
+            'example': '0111-1234567-8',
+        },
+        'prc_id': {
+            'label': 'PRC ID',
+            'example': '1234567',
+        },
+        'postal_id': {
+            'label': 'Postal ID',
+            'example': '123456789012',
+        },
+    }
+
+    VALID_DOCUMENT_TYPES = list(DOCUMENT_TYPE_CONFIG.keys())
+
     class Meta:
         model = IdentityDocument
         fields = ['id', 'document_type', 'document_number', 'front_image', 'back_image', 'submitted_at', 'updated_at']
         read_only_fields = ['submitted_at', 'updated_at']
+
+    def validate_document_type(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Document type is required.')
+        value = value.strip().lower()
+        if value not in self.VALID_DOCUMENT_TYPES:
+            raise serializers.ValidationError(
+                f'Invalid document type. Allowed: {", ".join(sorted(self.VALID_DOCUMENT_TYPES))}.'
+            )
+        return value
+
+    def validate_document_number(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('Document number is required.')
+        return value.strip()
+
+    def validate(self, data):
+        # No format validation on document_number — free-form input
+        # with the example serving only as a placeholder guide.
+        return data
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

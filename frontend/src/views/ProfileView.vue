@@ -66,20 +66,51 @@ const docSuccess = ref('')
 const expandedDocId = ref<number | null>(null)
 const confirmDeleteId = ref<number | null>(null)
 
-function formatLicense(value: string): string {
-  let raw = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
-  if (raw.length === 0) return ''
-  if (!/^[A-Z]/.test(raw)) raw = raw.slice(1)
-  raw = raw[0] + raw.slice(1).replace(/\D/g, '')
-  raw = raw.slice(0, 11)
-  if (raw.length <= 3) return raw
-  if (raw.length <= 5) return raw.slice(0, 3) + '-' + raw.slice(3)
-  return raw.slice(0, 3) + '-' + raw.slice(3, 5) + '-' + raw.slice(5)
+// ── Per-document-type placeholder examples ──
+// No format validation is enforced — the placeholder is a visual guide only.
+const DOCUMENT_FORMATS: Record<string, { placeholder: string }> = {
+  drivers_license: { placeholder: 'XXX00-00-000000' },
+  passport:         { placeholder: 'X0000000' },
+  national_id:      { placeholder: '0000-0000000-0' },
+  sss_id:           { placeholder: '00-0000000-0' },
+  umid:             { placeholder: '0000-0000000-0' },
+  prc_id:           { placeholder: '0000000' },
+  postal_id:        { placeholder: '000000000000' },
+}
+
+// Maps legacy frontend values to backend values
+const DOC_TYPE_MAP: Record<string, string> = {
+  sss: 'sss_id',
+  other: 'national_id',
+}
+
+function getDisplayLabel(type: string): string {
+  const labels: Record<string, string> = {
+    drivers_license: "Driver's License",
+    passport: 'Passport',
+    national_id: 'National ID (PhilSys)',
+    sss_id: 'SSS ID',
+    umid: 'UMID',
+    prc_id: 'PRC ID',
+    postal_id: 'Postal ID',
+  }
+  return labels[type] || type.replace(/_/g, ' ')
 }
 
 function onDocNumberInput(event: Event) {
   const input = event.target as HTMLInputElement
-  documentNumber.value = formatLicense(input.value)
+  documentNumber.value = input.value
+}
+
+// Update documentNumber when document type changes
+function onDocTypeChange(event: Event) {
+  const select = event.target as HTMLSelectElement
+  documentType.value = select.value
+}
+
+// No special formatting — just trim whitespace before submitting
+function getRawDocumentNumber(): string {
+  return documentNumber.value.trim()
 }
 
 function onFrontImageChange(event: Event) {
@@ -150,7 +181,7 @@ async function submitDocument() {
   try {
     const formData = new FormData()
     formData.append('document_type', documentType.value)
-    formData.append('document_number', documentNumber.value.replace(/-/g, ''))
+    formData.append('document_number', getRawDocumentNumber())
     if (frontImage.value) formData.append('front_image', frontImage.value)
     if (backImage.value) formData.append('back_image', backImage.value)
 
@@ -304,7 +335,7 @@ onMounted(async () => {
               @click="toggleExpanded(doc.id)"
             >
               <div>
-                <p class="font-medium text-zinc-900 capitalize">{{ doc.document_type.replace('_', ' ') }}</p>
+                <p class="font-medium text-zinc-900">{{ getDisplayLabel(doc.document_type) }}</p>
                 <p class="text-xs text-zinc-400 mt-0.5">
                   Updated {{ new Date(doc.updated_at).toLocaleDateString() }}
                 </p>
@@ -323,7 +354,8 @@ onMounted(async () => {
                   :model-value="documentNumber"
                   @input="onDocNumberInput"
                   type="text"
-                  maxlength="13"
+                  maxlength="50"
+                  :placeholder="DOCUMENT_FORMATS[documentType]?.placeholder || 'Enter document number'"
                   required
                 />
               </div>
@@ -333,13 +365,16 @@ onMounted(async () => {
                 <Label>Document Type</Label>
                 <select
                   v-model="documentType"
+                  @change="onDocTypeChange"
                   class="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
                 >
                   <option value="drivers_license">Driver's License</option>
                   <option value="passport">Passport</option>
-                  <option value="national_id">National ID</option>
-                  <option value="sss">SSS / UMID</option>
-                  <option value="other">Other</option>
+                  <option value="national_id">National ID (PhilSys)</option>
+                  <option value="sss_id">SSS ID</option>
+                  <option value="umid">UMID</option>
+                  <option value="prc_id">PRC ID</option>
+                  <option value="postal_id">Postal ID</option>
                 </select>
               </div>
 
@@ -412,13 +447,16 @@ onMounted(async () => {
             <Label>Document Type</Label>
             <select
               v-model="documentType"
+              @change="onDocTypeChange"
               class="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
             >
               <option value="drivers_license">Driver's License</option>
               <option value="passport">Passport</option>
-              <option value="national_id">National ID</option>
-              <option value="sss">SSS / UMID</option>
-              <option value="other">Other</option>
+              <option value="national_id">National ID (PhilSys)</option>
+              <option value="sss_id">SSS ID</option>
+              <option value="umid">UMID</option>
+              <option value="prc_id">PRC ID</option>
+              <option value="postal_id">Postal ID</option>
             </select>
           </div>
 
@@ -428,8 +466,8 @@ onMounted(async () => {
               :model-value="documentNumber"
               @input="onDocNumberInput"
               type="text"
-              placeholder="N01-23-456789"
-              maxlength="13"
+              :placeholder="DOCUMENT_FORMATS[documentType]?.placeholder || 'Enter document number'"
+              maxlength="50"
               required
             />
           </div>

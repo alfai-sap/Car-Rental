@@ -110,7 +110,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             booked_unit_ids = Booking.objects.filter(
                 vehicle=locked_vehicle,
                 vehicle_unit__isnull=False,
-                status__in=['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active'],
+                status__in=UNIT_OCCUPYING_STATUSES,
                 pickup_date__lt=return_date,
                 return_date__gt=pickup_date,
             ).values_list('vehicle_unit_id', flat=True)
@@ -176,8 +176,128 @@ class BookingViewSet(viewsets.ModelViewSet):
                 before_state=before, after_state={'status': booking.status},
                 request=request,
             )
+        else:
+            # Customer cancelled their own booking — still log for completeness
+            create_audit_log(
+                actor=request.user, action='booking_cancelled', booking=booking,
+                summary=f'Customer cancelled booking {booking.booking_number}: {reason}' if reason else f'Customer cancelled booking {booking.booking_number}',
+                before_state=before, after_state={'status': booking.status},
+                request=request,
+            )
 
         notify.notify_booking_cancelled(booking)
+        return Response(BookingSerializer(booking).data)
+
+    # ── Payment expiry → repayment request workflow ──
+
+    @action(detail=True, methods=['post'], url_path='request-repayment')
+    def request_repayment(self, request, pk=None):
+        """Customer requests a new payment attempt after payment expired.
+
+        The booking must be in 'awaiting_payment' status with a recently
+        expired payment.  This flags the booking for admin review — the
+        admin can then approve (→ new payment session) or reject (→ cancel).
+        """
+        booking = self.get_object()
+        if booking.customer != request.user:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status != 'awaiting_payment':
+            return Response(
+                {'detail': 'Only bookings awaiting payment can request a repayment.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify there is an expired payment for this booking
+        has_expired = booking.payments.filter(payment_status='expired').exists()
+        if not has_expired:
+            return Response(
+                {'detail': 'No expired payment found. You can still pay using the existing checkout.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        booking.repayment_requested = True
+        booking.save(update_fields=['repayment_requested', 'updated_at'])
+
+        notify.notify_repayment_requested(booking)
+        logger.info(
+            'Repayment requested for booking %s by customer %s',
+            booking.booking_number, request.user.email,
+        )
+        return Response({'detail': 'Repayment request submitted. An admin will review it shortly.'})
+
+    @action(detail=True, methods=['post'], url_path='approve-repayment')
+    def approve_repayment(self, request, pk=None):
+        """Admin approves the repayment request.
+
+        Resets the repayment_requested flag so the customer can create
+        a new PayMongo checkout session.  The booking stays in
+        'awaiting_payment'.  A new Payment record will be created when
+        the customer calls PaymentCreateSessionView.
+        """
+        booking = self.get_object()
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status != 'awaiting_payment':
+            return Response(
+                {'detail': 'Only bookings awaiting payment are eligible.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not booking.repayment_requested:
+            return Response(
+                {'detail': 'No repayment request is pending for this booking.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        booking.repayment_requested = False
+        booking.save(update_fields=['repayment_requested', 'updated_at'])
+
+        notify.notify_repayment_approved(booking)
+        logger.info(
+            'Repayment approved for booking %s by admin %s',
+            booking.booking_number, request.user.email,
+        )
+        return Response(BookingSerializer(booking).data)
+
+    @action(detail=True, methods=['post'], url_path='reject-repayment')
+    def reject_repayment(self, request, pk=None):
+        """Admin rejects the repayment request — booking is cancelled."""
+        booking = self.get_object()
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status != 'awaiting_payment':
+            return Response(
+                {'detail': 'Only bookings awaiting payment are eligible.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not booking.repayment_requested:
+            return Response(
+                {'detail': 'No repayment request is pending for this booking.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('cancellation_reason', 'Repayment request rejected by admin.')
+        before = {'status': booking.status, 'repayment_requested': True}
+
+        with transaction.atomic():
+            booking.status = 'cancelled'
+            booking.cancellation_reason = reason
+            booking.repayment_requested = False
+            if booking.vehicle_unit:
+                booking.vehicle_unit.status = 'available'
+                booking.vehicle_unit.save()
+            booking.save()
+
+        create_audit_log(
+            actor=request.user, action='booking_cancelled', booking=booking,
+            summary=f'Admin rejected repayment request for booking {booking.booking_number}: {reason}',
+            before_state=before, after_state={'status': booking.status},
+            request=request,
+        )
+        notify.notify_repayment_rejected(booking)
+        logger.info(
+            'Repayment rejected for booking %s by admin %s',
+            booking.booking_number, request.user.email,
+        )
         return Response(BookingSerializer(booking).data)
 
     # ── Admin actions ──
@@ -193,6 +313,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         before = {'status': booking.status}
 
         with transaction.atomic():
+            # Lock the row to prevent concurrent admin actions
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status != 'pending_approval':
+                return Response({'detail': 'Only pending bookings can be approved.'}, status=status.HTTP_400_BAD_REQUEST)
             booking.status = 'awaiting_payment'
             booking.save()
 
@@ -220,6 +344,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         before = {'status': booking.status}
 
         with transaction.atomic():
+            # Lock the row to prevent concurrent admin actions
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status != 'pending_approval':
+                return Response({'detail': 'Only pending bookings can be rejected.'}, status=status.HTTP_400_BAD_REQUEST)
             booking.status = 'rejected'
             booking.rejection_reason = ser.validated_data.get('rejection_reason', '')
             if booking.vehicle_unit:
@@ -316,6 +444,10 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'A vehicle unit must be assigned before activating.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            # Lock the row to prevent concurrent admin actions
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status not in ['confirmed', 'waiting_for_pickup']:
+                return Response({'detail': 'Only confirmed or waiting bookings can be marked active.'}, status=status.HTTP_400_BAD_REQUEST)
             before = {'status': booking.status, 'unit': booking.vehicle_unit.plate_number if booking.vehicle_unit else None}
             booking.status = 'active'
             booking.handover_time = timezone.now()

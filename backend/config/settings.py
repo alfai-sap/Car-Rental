@@ -10,6 +10,32 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ── Sentry (error monitoring) ───────────────────────────
+SENTRY_DSN = os.getenv('SENTRY_DSN', '')
+if SENTRY_DSN and not DEBUG:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+    import logging as sentry_logging
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(
+                transaction_style='url',
+                middleware_spans=True,
+            ),
+            LoggingIntegration(
+                level=sentry_logging.INFO,
+                event_level=sentry_logging.WARNING,
+            ),
+        ],
+        traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
+        send_default_pii=False,
+        environment=os.getenv('SENTRY_ENVIRONMENT', 'production'),
+        release=os.getenv('SENTRY_RELEASE', ''),
+    )
+
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
     raise ImproperlyConfigured(

@@ -104,15 +104,18 @@ class PaymentCreateSessionView(APIView):
                     'due_date': timezone.now().date() + timedelta(days=3),
                 },
             )
-            # Always sync invoice totals to booking for re-attempt scenarios
+            # Sync invoice subtotal to booking on re-attempt, but ONLY when the
+            # invoice has no additional charges or discount applied (e.g. late
+            # fees, extensions).  Otherwise we would silently erase adjustments
+            # that were manually added by an administrator.
             if invoice.invoice_status != Invoice.STATUS_PAID:
-                needs_sync = (
-                    invoice.subtotal != booking.subtotal
-                    or invoice.total != booking.estimated_total
+                has_adjustments = (
+                    (invoice.additional_charges or 0) != 0
+                    or (invoice.discount or 0) != 0
                 )
-                if needs_sync:
+                if not has_adjustments and invoice.subtotal != booking.subtotal:
                     invoice.subtotal = booking.subtotal
-                    invoice.total = booking.estimated_total
+                    invoice.total = booking.subtotal
                     invoice.save(update_fields=['subtotal', 'total', 'updated_at'])
 
             payment = Payment.objects.create(
@@ -314,9 +317,10 @@ class PaymentWebhookView(APIView):
             with transaction.atomic():
                 payment.payment_status = Payment.STATUS_EXPIRED
                 payment.save()
-                # Booking stays in awaiting_payment — customer should re-initiate
+                # Booking stays in awaiting_payment — customer can request a
+                # new payment attempt via the request-repayment endpoint.
 
-            notify.notify_payment_failed(booking)
+            notify.notify_payment_expired(booking)
             logger.info(
                 'PayMongo webhook: payment %s expired for booking %s',
                 payment.payment_number, booking.booking_number,

@@ -63,6 +63,11 @@ class Booking(models.Model):
     )
     # Identity snapshot — immutable record of customer identity at booking time
     identity_snapshot = models.JSONField(default=dict, blank=True)
+    # Repayment request — customer can request a new payment attempt after expiry
+    repayment_requested = models.BooleanField(
+        default=False,
+        help_text='Set to True when customer requests a new payment attempt after expiry.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

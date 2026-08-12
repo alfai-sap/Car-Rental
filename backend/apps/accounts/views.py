@@ -141,6 +141,22 @@ class LoginView(views.APIView):
         password = serializer.validated_data['password']
 
         user = User.objects.filter(email=email).first()
+
+        # ── Account-level brute-force lockout check ──
+        # Even if the account exists and is locked, we return the same
+        # generic "Invalid email or password" to prevent user-enumeration.
+        # The 'code' field lets the frontend show a helpful hint without
+        # leaking which accounts exist.
+        if user and user.is_locked_out():
+            logger.warning(
+                'Login attempt for locked account: %s (locked until %s)',
+                email, user.locked_until,
+            )
+            return Response(
+                {'detail': 'Invalid email or password.', 'code': 'account_locked'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
         if user and user.check_password(password):
             if not user.is_verified and not user.is_staff:
                 # Return 401 with code=unverified so the frontend can show
@@ -153,6 +169,8 @@ class LoginView(views.APIView):
                     {'detail': 'Invalid email or password.', 'code': 'email_unverified'},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
+            # Successful login — clear any stale lockout state
+            user.clear_failed_attempts()
             tokens = get_tokens_for_user(user)
             response = Response({
                 'user': UserSerializer(user).data,
@@ -160,6 +178,17 @@ class LoginView(views.APIView):
             })
             _set_refresh_cookie(response, tokens['refresh'])
             return response
+
+        # Failed login — record the attempt if the account exists.
+        # We do NOT record attempts for nonexistent emails to prevent
+        # attackers from locking arbitrary accounts via enumeration.
+        if user:
+            user.record_failed_login()
+            logger.info(
+                'Failed login for account %s (attempt %s/%s)',
+                email, user.failed_login_attempts, User.MAX_FAILED_ATTEMPTS,
+            )
+
         return Response({'detail': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
 

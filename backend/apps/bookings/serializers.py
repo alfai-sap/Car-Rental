@@ -34,13 +34,13 @@ class BookingSerializer(serializers.ModelSerializer):
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
             'handover_time', 'return_time_actual', 'return_unit_status',
-            'created_at', 'updated_at',
+            'repayment_requested', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'booking_number', 'customer', 'vehicle_unit',
             'rental_days', 'subtotal', 'estimated_total', 'status',
             'rejection_reason', 'cancellation_reason', 'created_at',
-            'updated_at', 'handover_time',
+            'updated_at', 'handover_time', 'repayment_requested',
         ]
 
     def get_vehicle_unit_plate(self, obj):

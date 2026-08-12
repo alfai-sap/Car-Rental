@@ -1,4 +1,4 @@
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from apps.core.validators import validate_image_size, validate_image_content
 
@@ -51,7 +51,11 @@ class Vehicle(models.Model):
     transmission = models.CharField(max_length=15, choices=TRANSMISSION_CHOICES, default='automatic')
     fuel = models.CharField(max_length=15, choices=FUEL_CHOICES, default='gasoline')
     seats = models.PositiveSmallIntegerField(default=5)
-    price_per_day = models.DecimalField(max_digits=10, decimal_places=2)
+    price_per_day = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        validators=[MinValueValidator(0.01)],
+        help_text='Daily rental price (must be greater than 0).',
+    )
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='available')
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

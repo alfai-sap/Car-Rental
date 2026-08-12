@@ -81,10 +81,5 @@ python manage.py seed_vehicles
 python manage.py shell -c "from apps.bookings.models import Booking; from apps.payments.models import Payment; Payment.objects.all().delete(); Booking.objects.all().delete()"
 python manage.py seed_vehicles --clear
 
-# 4. Create admin superuser (if not using the default from README)
+# 4. Create admin superuser
 python manage.py createsuperuser
-
-#Admin Credentials
-/admin/login
-Email	admin@carrental.com
-Password	Admin123!
