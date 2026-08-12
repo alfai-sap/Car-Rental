@@ -16,7 +16,7 @@ import { Car } from 'lucide-vue-next'
           <Car class="w-8 h-8 text-zinc-600" />
         </div>
         <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold text-zinc-900 tracking-tight leading-tight">
-          Find Your Perfect Ride
+          FIND YOUR PERFECT RIDE
         </h1>
         <p class="mt-6 text-lg text-zinc-500 max-w-xl mx-auto leading-relaxed">
           Browse our fleet of quality vehicles and book your next journey.
