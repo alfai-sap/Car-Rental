@@ -69,8 +69,8 @@ class User(AbstractUser):
         blank=True,
         validators=[
             RegexValidator(
-                regex=r'^\+?[1-9]\d{6,14}$',
-                message='Enter a valid phone number (e.g. +639123456789).',
+                regex=r'^09\d{9}$',
+                message='Enter a valid 11-digit mobile number (e.g. 09123456789).',
             ),
         ],
     )

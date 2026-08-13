@@ -160,88 +160,57 @@ onMounted(async () => {
           <ChevronLeft class="h-4 w-4" /> Back to vehicles
         </RouterLink>
 
-        <!-- Image Gallery -->
-        <div v-if="vehicle.images.length" class="mb-8">
-          <div class="relative aspect-[16/10] bg-zinc-100 rounded-lg overflow-hidden">
-            <img
-              :src="vehicle.images[currentImageIndex]?.image"
-              :alt="`${vehicle.make} ${vehicle.model}`"
-              class="w-full h-full object-cover cursor-zoom-in"
-              @click="openLightbox"
-            />
-            <button
-              v-if="vehicle.images.length > 1"
-              @click="prevImage"
-              class="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
-            >
-              <ChevronLeft class="h-5 w-5 text-zinc-700" />
-            </button>
-            <button
-              v-if="vehicle.images.length > 1"
-              @click="nextImage"
-              class="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
-            >
-              <ChevronRight class="h-5 w-5 text-zinc-700" />
-            </button>
-            <span v-if="vehicle.images.length > 1" class="absolute bottom-3 right-3 text-xs bg-black/60 text-white px-2 py-1 rounded-full">
-              {{ currentImageIndex + 1 }} / {{ vehicle.images.length }}
-            </span>
-          </div>
-          <!-- Thumbnails -->
-          <div v-if="vehicle.images.length > 1" class="flex gap-2 mt-3 overflow-x-auto">
-            <button
-              v-for="(img, idx) in vehicle.images"
-              :key="img.id"
-              @click="selectImage(idx)"
-              class="flex-shrink-0 w-16 h-12 rounded-md overflow-hidden border-2 transition"
-              :class="idx === currentImageIndex ? 'border-zinc-900' : 'border-transparent hover:border-zinc-300'"
-            >
-              <img :src="img.image" class="w-full h-full object-cover" />
-            </button>
-          </div>
-        </div>
-
-        <!-- No Images -->
-        <div v-else class="aspect-[16/10] bg-zinc-100 rounded-lg flex items-center justify-center mb-8">
-          <Car class="h-16 w-16 text-zinc-300" />
-        </div>
-
-        <!-- Info Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <!-- Main Info -->
-          <div class="lg:col-span-2 space-y-6">
-            <div>
-              <h1 class="text-2xl font-semibold text-zinc-900">{{ vehicle.make }} {{ vehicle.model }}</h1>
-              <p class="text-zinc-500">{{ vehicle.year }} · {{ vehicle.type }}</p>
-            </div>
-
-            <!-- Description -->
-            <div v-if="vehicle.description">
-              <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2">Description</h2>
-              <p class="text-sm text-zinc-700 leading-relaxed">{{ vehicle.description }}</p>
-            </div>
-
-            <!-- Specs -->
-            <div>
-              <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Specifications</h2>
-              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div class="flex items-center gap-2 text-sm text-zinc-700">
-                  <Gauge class="h-4 w-4 text-zinc-400" />
-                  <span class="capitalize">{{ vehicle.transmission }}</span>
-                </div>
-                <div class="flex items-center gap-2 text-sm text-zinc-700">
-                  <Fuel class="h-4 w-4 text-zinc-400" />
-                  <span class="capitalize">{{ vehicle.fuel }}</span>
-                </div>
-                <div class="flex items-center gap-2 text-sm text-zinc-700">
-                  <Users class="h-4 w-4 text-zinc-400" />
-                  <span>{{ vehicle.seats }} seats</span>
-                </div>
+        <!-- Gallery + Booking Sidebar -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+          <!-- Image Gallery -->
+          <div class="lg:col-span-2">
+            <div v-if="vehicle.images.length">
+              <div class="relative aspect-[16/10] bg-zinc-100 rounded-lg overflow-hidden">
+                <img
+                  :src="vehicle.images[currentImageIndex]?.image"
+                  :alt="`${vehicle.make} ${vehicle.model}`"
+                  class="w-full h-full object-cover cursor-zoom-in"
+                  @click="openLightbox"
+                />
+                <button
+                  v-if="vehicle.images.length > 1"
+                  @click="prevImage"
+                  class="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+                >
+                  <ChevronLeft class="h-5 w-5 text-zinc-700" />
+                </button>
+                <button
+                  v-if="vehicle.images.length > 1"
+                  @click="nextImage"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+                >
+                  <ChevronRight class="h-5 w-5 text-zinc-700" />
+                </button>
+                <span v-if="vehicle.images.length > 1" class="absolute bottom-3 right-3 text-xs bg-black/60 text-white px-2 py-1 rounded-full">
+                  {{ currentImageIndex + 1 }} / {{ vehicle.images.length }}
+                </span>
+              </div>
+              <!-- Thumbnails -->
+              <div v-if="vehicle.images.length > 1" class="flex gap-2 mt-3 overflow-x-auto">
+                <button
+                  v-for="(img, idx) in vehicle.images"
+                  :key="img.id"
+                  @click="selectImage(idx)"
+                  class="flex-shrink-0 w-16 h-12 rounded-md overflow-hidden border-2 transition"
+                  :class="idx === currentImageIndex ? 'border-zinc-900' : 'border-transparent hover:border-zinc-300'"
+                >
+                  <img :src="img.image" class="w-full h-full object-cover" />
+                </button>
               </div>
             </div>
+
+            <!-- No Images -->
+            <div v-else class="aspect-[16/10] bg-zinc-100 rounded-lg flex items-center justify-center">
+              <Car class="h-16 w-16 text-zinc-300" />
+            </div>
           </div>
 
-          <!-- Sidebar -->
+          <!-- Booking Sidebar -->
           <div class="rounded-lg border border-zinc-200 bg-white p-6 h-fit space-y-4">
             <div>
               <p class="text-2xl font-bold text-zinc-900">{{ formatPrice(vehicle.price_per_day) }}</p>
@@ -296,6 +265,39 @@ onMounted(async () => {
               </RouterLink>
               <Button v-else class="w-full" disabled>Unavailable</Button>
             </template>
+          </div>
+        </div>
+
+        <!-- Main Info -->
+        <div class="space-y-6">
+          <div>
+            <h1 class="text-2xl font-semibold text-zinc-900">{{ vehicle.make }} {{ vehicle.model }}</h1>
+            <p class="text-zinc-500">{{ vehicle.year }} · {{ vehicle.type }}</p>
+          </div>
+
+          <!-- Description -->
+          <div v-if="vehicle.description">
+            <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2">Description</h2>
+            <p class="text-sm text-zinc-700 leading-relaxed">{{ vehicle.description }}</p>
+          </div>
+
+          <!-- Specs -->
+          <div>
+            <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Specifications</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div class="flex items-center gap-2 text-sm text-zinc-700">
+                <Gauge class="h-4 w-4 text-zinc-400" />
+                <span class="capitalize">{{ vehicle.transmission }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm text-zinc-700">
+                <Fuel class="h-4 w-4 text-zinc-400" />
+                <span class="capitalize">{{ vehicle.fuel }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-sm text-zinc-700">
+                <Users class="h-4 w-4 text-zinc-400" />
+                <span>{{ vehicle.seats }} seats</span>
+              </div>
+            </div>
           </div>
         </div>
       </template>

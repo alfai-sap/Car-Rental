@@ -273,6 +273,6 @@ class ProfileSerializer(serializers.Serializer):
     def validate_phone(self, value):
         import re
         value = (value or '').strip()
-        if value and not re.match(r'^\+?[1-9]\d{6,14}$', value):
-            raise serializers.ValidationError('Enter a valid phone number (e.g. +639123456789).')
+        if value and not re.match(r'^09\d{9}$', value):
+            raise serializers.ValidationError('Enter a valid 11-digit mobile number (e.g. 09123456789).')
         return value

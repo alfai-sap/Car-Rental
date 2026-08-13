@@ -16,7 +16,7 @@ class RegisterTests(TestCase):
             'email': 'test@example.com',
             'first_name': 'Test',
             'last_name': 'User',
-            'phone': '+639123456789',
+            'phone': '09123456789',
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
         }

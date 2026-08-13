@@ -431,7 +431,13 @@ onMounted(async () => {
           </div>
           <div class="space-y-2">
             <Label>Phone Number</Label>
-            <Input v-model="profilePhone" type="text" placeholder="+639123456789" />
+            <Input
+              v-model="profilePhone"
+              type="tel"
+              inputmode="numeric"
+              maxlength="11"
+              placeholder="09123456789"
+            />
           </div>
 
           <p v-if="profileError" class="text-sm text-red-600">{{ profileError }}</p>

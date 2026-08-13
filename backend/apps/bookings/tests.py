@@ -18,7 +18,7 @@ def _create_verified_customer(email='cust@test.com', password='Pass123!'):
     user = User.objects.create_user(
         email=email, username=email.split('@')[0],
         first_name='Test', last_name='Customer',
-        phone='+639123456789',
+        phone='09123456789',
         password=password, is_verified=True,
     )
     return user
