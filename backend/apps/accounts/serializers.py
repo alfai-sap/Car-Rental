@@ -71,22 +71,33 @@ def _identity_image_token(doc_pk, user_pk):
     return account_token_generator._email_verifier.signer.sign(f'{doc_pk}.{user_pk}')
 
 
-class RegisterSerializer(serializers.ModelSerializer):
+def _identity_snapshot_image_token(booking_id, user_id, doc_index, side):
+    """Short-lived signed token for booking identity-snapshot image access.
+
+    Encodes the booking ID, owning user ID, document index, and image side
+    so the snapshot image view can verify ownership without an
+    Authorization header.  Format: "booking_id.user_id.doc_index.side"
+    """
+    return account_token_generator._email_verifier.signer.sign(
+        f'{booking_id}.{user_id}.{doc_index}.{side}'
+    )
+
+
+class RegisterSerializer(serializers.Serializer):
+    """Minimal registration: email + password + password confirmation.
+
+    First name, last name, and phone are collected later during profile
+    completion to keep registration friction low.
+    """
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = User
-        fields = ['email', 'first_name', 'last_name', 'phone', 'password', 'password2']
-        extra_kwargs = {
-            'email': {'validators': []},  # Remove UniqueValidator for anti-enumeration
-        }
 
     def validate_email(self, value):
         # NOTE: We intentionally do NOT reject duplicate emails here.
         # The view handles existing-account silently to prevent
         # user-enumeration attacks (see RegisterView docstring).
-        return value
+        return value.lower()
 
     def validate(self, data):
         if data['password'] != data['password2']:
@@ -95,22 +106,27 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
-        base_username = validated_data['email'].split('@')[0]
-        username = base_username
-        # Avoid UNIQUE constraint collisions when two users share the same
-        # email local-part (e.g. john@gmail.com and john@yahoo.com).
-        # Retry with incrementing suffixes until we find a free username.
-        suffix = 1
-        while User.objects.filter(username=username).exists():
-            username = f'{base_username}{suffix}'
-            suffix += 1
-        user = User.objects.create_user(username=username, is_active=True, **validated_data)
-        return user
+        return User.objects.create_user(
+            email=validated_data['email'],
+            password=validated_data['password'],
+            is_active=True,
+        )
 
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    """Validate the Google ID token supplied by the frontend.
+
+    The backend independently verifies the token signature with Google,
+    obtains the verified email, and authenticates (or provisions) the
+    matching account.  The frontend must NOT be trusted to supply the
+    email/name directly.
+    """
+    credential = serializers.CharField(write_only=True)
 
 
 class VerifyEmailSerializer(serializers.Serializer):
@@ -224,7 +240,39 @@ class IdentityDocumentSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     identity_documents = IdentityDocumentSerializer(many=True, read_only=True)
+    auth_method = serializers.CharField(read_only=True)
+    profile_complete = serializers.SerializerMethodField(read_only=True)
+    identity_complete = serializers.SerializerMethodField(read_only=True)
+    booking_eligible = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'is_verified', 'is_staff', 'identity_documents']
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'phone',
+            'is_verified', 'is_staff', 'auth_method',
+            'profile_complete', 'identity_complete', 'booking_eligible',
+            'identity_documents',
+        ]
+
+    def get_profile_complete(self, obj):
+        return obj.is_profile_complete()
+
+    def get_identity_complete(self, obj):
+        return obj.is_identity_complete()
+
+    def get_booking_eligible(self, obj):
+        return obj.is_booking_eligible()
+
+
+class ProfileSerializer(serializers.Serializer):
+    """Update the customer's personal profile fields."""
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    phone = serializers.CharField(max_length=20)
+
+    def validate_phone(self, value):
+        import re
+        value = (value or '').strip()
+        if value and not re.match(r'^\+?[1-9]\d{6,14}$', value):
+            raise serializers.ValidationError('Enter a valid phone number (e.g. +639123456789).')
+        return value

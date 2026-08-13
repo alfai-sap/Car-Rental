@@ -21,6 +21,23 @@ interface IdentityDoc {
   back_image: string | null
 }
 
+interface IdentitySnapshotDoc {
+  id: number
+  document_type: string
+  document_number: string
+  front_image: string | null
+  back_image: string | null
+  index?: number
+}
+
+interface IdentitySnapshot {
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  documents: IdentitySnapshotDoc[]
+  captured_at: string
+}
+
 interface VehicleImage {
   id: number
   image: string
@@ -35,6 +52,7 @@ interface Booking {
   customer_name: string
   customer_phone: string
   customer_identity_docs: IdentityDoc[]
+  identity_snapshot: IdentitySnapshot
   vehicle: number
   vehicle_name: string
   vehicle_images: VehicleImage[]
@@ -397,45 +415,80 @@ onMounted(fetchBooking)
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <!-- Left: Booking Details -->
           <div class="lg:col-span-2 space-y-6">
-            <!-- Customer Info -->
+            <!-- Customer: Current Profile vs Snapshot (side by side) -->
             <div class="rounded-md border border-zinc-200 bg-white p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Customer</h2>
-              <div class="flex items-start gap-3 mb-4">
-                <div class="h-10 w-10 rounded-full bg-zinc-200 flex items-center justify-center flex-shrink-0">
-                  <User class="h-5 w-5 text-zinc-500" />
-                </div>
-                <div>
-                  <p class="text-sm font-medium text-zinc-900">{{ booking.customer_name }}</p>
-                  <p class="text-xs text-zinc-500">{{ booking.customer_email }}</p>
-                  <p class="text-xs text-zinc-400">{{ booking.customer_phone || 'No phone' }}</p>
-                </div>
-              </div>
 
-              <!-- Identity Documents -->
-              <div v-if="booking.customer_identity_docs && booking.customer_identity_docs.length > 0" class="space-y-4 pt-4 border-t border-zinc-100">
-                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider">Identity Documents</p>
-                <div v-for="doc in booking.customer_identity_docs" :key="doc.id" class="p-3 rounded-md bg-zinc-50 border border-zinc-100">
-                  <div class="flex items-center justify-between mb-2">
-                    <div>
-                      <p class="text-xs font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
-                      <p class="text-xs text-zinc-500">{{ doc.document_number }}</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Current Profile (live) -->
+                <div class="rounded-md border border-zinc-100 bg-zinc-50 p-4">
+                  <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Current Profile</p>
+                  <div class="flex items-start gap-2 mb-3">
+                    <div class="h-8 w-8 rounded-full bg-zinc-200 flex items-center justify-center flex-shrink-0">
+                      <User class="h-4 w-4 text-zinc-500" />
+                    </div>
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-zinc-900 truncate">{{ booking.customer_name }}</p>
+                      <p class="text-xs text-zinc-500 truncate">{{ booking.customer_email }}</p>
+                      <p class="text-xs text-zinc-400">{{ booking.customer_phone || 'No phone' }}</p>
                     </div>
                   </div>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <p class="text-[10px] text-zinc-400 mb-1">Front</p>
-                      <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
-                      <div v-else class="w-full h-24 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
-                    </div>
-                    <div>
-                      <p class="text-[10px] text-zinc-400 mb-1">Back</p>
-                      <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
-                      <div v-else class="w-full h-24 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
+
+                  <div v-if="booking.customer_identity_docs && booking.customer_identity_docs.length > 0" class="space-y-2">
+                    <div v-for="doc in booking.customer_identity_docs" :key="doc.id" class="rounded bg-white border border-zinc-100 p-2">
+                      <p class="text-[11px] font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
+                      <p class="text-[11px] text-zinc-500">{{ doc.document_number }}</p>
+                      <div class="grid grid-cols-2 gap-1.5 mt-1.5">
+                        <div>
+                          <p class="text-[9px] text-zinc-400 mb-0.5">Front</p>
+                          <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-14 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
+                          <div v-else class="w-full h-14 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[9px] text-zinc-400">No image</span></div>
+                        </div>
+                        <div>
+                          <p class="text-[9px] text-zinc-400 mb-0.5">Back</p>
+                          <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-14 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
+                          <div v-else class="w-full h-14 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[9px] text-zinc-400">No image</span></div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <div v-else class="text-xs text-zinc-400">No identity documents submitted.</div>
+                </div>
+
+                <!-- Identity Snapshot (immutable, captured at booking) -->
+                <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+                  <p class="text-xs font-medium text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1">
+                    <Shield class="h-3.5 w-3.5" /> Snapshot (at booking)
+                  </p>
+
+                  <div v-if="booking.identity_snapshot" class="space-y-1 text-xs">
+                    <p class="text-zinc-700"><span class="text-zinc-400">Name:</span> {{ booking.identity_snapshot.customer_name || '—' }}</p>
+                    <p class="text-zinc-700 truncate"><span class="text-zinc-400">Email:</span> {{ booking.identity_snapshot.customer_email || '—' }}</p>
+                    <p class="text-zinc-700"><span class="text-zinc-400">Phone:</span> {{ booking.identity_snapshot.customer_phone || '—' }}</p>
+                    <p v-if="booking.identity_snapshot.captured_at" class="text-zinc-400">{{ formatDateTime(booking.identity_snapshot.captured_at) }}</p>
+                  </div>
+
+                  <div v-if="booking.identity_snapshot && booking.identity_snapshot.documents && booking.identity_snapshot.documents.length > 0" class="mt-3 space-y-2">
+                    <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="rounded bg-white border border-amber-100 p-2">
+                      <p class="text-[11px] font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
+                      <p class="text-[11px] text-zinc-500">{{ doc.document_number }}</p>
+                      <div class="grid grid-cols-2 gap-1.5 mt-1.5">
+                        <div>
+                          <p class="text-[9px] text-zinc-400 mb-0.5">Front</p>
+                          <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-14 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
+                          <div v-else class="w-full h-14 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[9px] text-zinc-400">No image</span></div>
+                        </div>
+                        <div>
+                          <p class="text-[9px] text-zinc-400 mb-0.5">Back</p>
+                          <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-14 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
+                          <div v-else class="w-full h-14 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[9px] text-zinc-400">No image</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-xs text-zinc-400">No snapshot captured.</div>
                 </div>
               </div>
-              <div v-else class="text-xs text-zinc-400 pt-4 border-t border-zinc-100">No identity documents submitted.</div>
             </div>
 
             <!-- Booking Details -->

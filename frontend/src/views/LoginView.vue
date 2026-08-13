@@ -1,13 +1,12 @@
-<script setup lang="ts">
-import { ref, computed } from 'vue'
+﻿<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
-import { Eye, EyeOff, Mail, AlertCircle } from 'lucide-vue-next'
+import { Eye, EyeOff, Mail } from 'lucide-vue-next'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
-import api from '@/services/api'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -21,8 +20,85 @@ const errorCode = ref('')
 const loading = ref(false)
 const resendingVerification = ref(false)
 const resendSent = ref(false)
+const googleLoading = ref(false)
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
 const isUnverified = computed(() => errorCode.value === 'email_unverified')
+
+// ── Google Sign-In (OIDC) ──
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: Record<string, unknown>) => void
+          renderButton: (el: HTMLElement, config: Record<string, unknown>) => void
+        }
+      }
+    }
+  }
+}
+
+function loadGoogleScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (document.getElementById('google-gis-script')) {
+      resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'google-gis-script'
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    document.head.appendChild(script)
+  })
+}
+
+async function handleGoogleResponse(credential: string) {
+  googleLoading.value = true
+  error.value = ''
+  errorCode.value = ''
+  try {
+    await auth.loginWithGoogle(credential)
+    const redirect = (route.query.redirect as string) || '/'
+    router.push(redirect)
+  } catch (err: unknown) {
+    const data = (err as { response?: { data?: { detail?: string } } })?.response?.data
+    error.value = data?.detail || 'Google Sign-In failed. Please try again.'
+  } finally {
+    googleLoading.value = false
+  }
+}
+
+async function initGoogleSignIn() {
+  if (!googleClientId) return
+  await loadGoogleScript()
+  const win = window
+  if (!win.google?.accounts?.id) return
+  win.google.accounts.id.initialize({
+    client_id: googleClientId,
+    callback: (response: { credential?: string }) => {
+      if (response?.credential) {
+        handleGoogleResponse(response.credential)
+      }
+    },
+  })
+  const container = document.getElementById('googleSignInButton')
+  if (container) {
+    win.google.accounts.id.renderButton(container, {
+      theme: 'outline',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'rectangular',
+      width: 320,
+    })
+  }
+}
+
+onMounted(() => {
+  initGoogleSignIn()
+})
 
 async function handleLogin() {
   loading.value = true
@@ -78,6 +154,16 @@ async function resendVerification() {
         </h1>
 
         <form @submit.prevent="handleLogin" class="space-y-5">
+          <!-- Google Sign-In -->
+          <div v-if="googleClientId" class="space-y-2">
+            <div id="googleSignInButton" class="flex justify-center"></div>
+            <div class="flex items-center gap-3 py-1">
+              <span class="flex-1 h-px bg-zinc-200"></span>
+              <span class="text-xs text-zinc-400">OR</span>
+              <span class="flex-1 h-px bg-zinc-200"></span>
+            </div>
+          </div>
+
           <div class="space-y-2">
             <Label>Email</Label>
             <Input v-model="email" type="email" required />
@@ -129,7 +215,7 @@ async function resendVerification() {
             </p>
           </div>
 
-          <Button type="submit" class="w-full" :disabled="loading">
+          <Button type="submit" class="w-full" :disabled="loading || googleLoading">
             {{ loading ? 'Signing in...' : 'Sign In' }}
           </Button>
 
@@ -150,5 +236,3 @@ async function resendVerification() {
     </div>
   </div>
 </template>
-
-

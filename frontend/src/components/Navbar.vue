@@ -34,7 +34,7 @@ onMounted(async () => {
 
 <template>
   <header class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-zinc-200">
-    <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-4">
       <div class="flex items-center justify-between h-16">
         <RouterLink
           to="/"

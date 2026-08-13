@@ -51,6 +51,7 @@ class NotificationAPITests(TestCase):
         self.customer = User.objects.create_user(
             email='cust@test.com', username='cust', password='Pass123!',
             first_name='Test', last_name='Customer', is_verified=True,
+            phone='+639123456789',
         )
         self.admin = User.objects.create_user(
             email='admin@test.com', username='admin', password='Admin123!',

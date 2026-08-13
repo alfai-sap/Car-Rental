@@ -12,9 +12,9 @@ import { Car } from 'lucide-vue-next'
     <!-- Hero Section -->
     <section class="flex-1 flex items-center justify-center px-4 pt-16">
       <div class="max-w-3xl mx-auto text-center">
-        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-100 mb-8">
+        <!-- <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-100 mb-8">
           <Car class="w-8 h-8 text-zinc-600" />
-        </div>
+        </div> -->
         <h1 class="text-4xl sm:text-5xl lg:text-6xl font-semibold text-zinc-900 tracking-tight leading-tight">
           FIND YOUR PERFECT RIDE
         </h1>

@@ -1,17 +1,104 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
 import api from '@/services/api'
-import { Upload, X, Pencil, ChevronDown, ChevronUp, ZoomIn, ZoomOut, RotateCcw } from 'lucide-vue-next'
+import { Upload, X, Pencil, ChevronDown, ChevronUp, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff } from 'lucide-vue-next'
 
 const auth = useAuthStore()
 const error = ref('')
 const success = ref('')
 const resendingVerification = ref(false)
+
+// ── Profile editing state ──
+const editingProfile = ref(false)
+const profileFirstName = ref('')
+const profileLastName = ref('')
+const profilePhone = ref('')
+const profileSaving = ref(false)
+const profileError = ref('')
+const profileSuccess = ref('')
+
+// ── Password change state ──
+const showPasswordSection = ref(false)
+const currentPassword = ref('')
+const newPassword = ref('')
+const newPassword2 = ref('')
+const showPassword = ref(false)
+const passwordSaving = ref(false)
+const passwordError = ref('')
+const passwordSuccess = ref('')
+
+const profileLocked = computed(() => !!(auth.user?.profile_locked || auth.user?.identity_locked))
+
+function startEditProfile() {
+  if (!auth.user) return
+  profileFirstName.value = auth.user.first_name || ''
+  profileLastName.value = auth.user.last_name || ''
+  profilePhone.value = auth.user.phone || ''
+  profileError.value = ''
+  profileSuccess.value = ''
+  editingProfile.value = true
+}
+
+function cancelEditProfile() {
+  editingProfile.value = false
+  profileError.value = ''
+  profileSuccess.value = ''
+}
+
+async function saveProfile() {
+  profileSaving.value = true
+  profileError.value = ''
+  profileSuccess.value = ''
+  try {
+    await auth.updateProfile({
+      first_name: profileFirstName.value.trim(),
+      last_name: profileLastName.value.trim(),
+      phone: profilePhone.value.trim(),
+    })
+    profileSuccess.value = 'Profile updated.'
+    editingProfile.value = false
+  } catch (err: unknown) {
+    const data = (err as { response?: { data?: Record<string, string[]> } })?.response?.data
+    if (data) {
+      profileError.value = Object.values(data).flat().join('. ')
+    } else {
+      profileError.value = 'Failed to update profile.'
+    }
+  } finally {
+    profileSaving.value = false
+  }
+}
+
+async function changePassword() {
+  passwordSaving.value = true
+  passwordError.value = ''
+  passwordSuccess.value = ''
+  try {
+    await auth.changePassword({
+      current_password: currentPassword.value,
+      new_password: newPassword.value,
+      new_password2: newPassword2.value,
+    })
+    passwordSuccess.value = 'Password changed. Please sign in again.'
+    currentPassword.value = ''
+    newPassword.value = ''
+    newPassword2.value = ''
+  } catch (err: unknown) {
+    const data = (err as { response?: { data?: Record<string, string[]> } })?.response?.data
+    if (data) {
+      passwordError.value = Object.values(data).flat().join('. ')
+    } else {
+      passwordError.value = 'Failed to change password.'
+    }
+  } finally {
+    passwordSaving.value = false
+  }
+}
 
 // Lightbox state
 const lightboxImage = ref('')
@@ -260,6 +347,19 @@ onMounted(async () => {
     <div class="flex-1 max-w-2xl mx-auto px-4 pt-24 pb-16 w-full space-y-10">
       <h1 class="text-2xl font-semibold text-zinc-900 tracking-tight">Profile</h1>
 
+      <!-- Profile Lock Indicator (top of page) -->
+      <div v-if="profileLocked" class="rounded-md border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <div>
+          <p class="text-sm font-semibold text-amber-800">Profile is locked</p>
+          <p class="text-sm text-amber-700 mt-0.5">
+            You have an active booking, so your profile and identity information cannot be edited.
+            Editing will be re-enabled once your booking is cancelled, rejected, or completed.
+            You can still change your password below.
+          </p>
+        </div>
+      </div>
+
       <!-- Unverified Banner -->
       <div v-if="auth.user && !auth.user.is_verified" class="rounded-md border border-amber-200 bg-amber-50 p-4">
         <p class="text-sm text-amber-800 font-medium">Your account is not verified.</p>
@@ -278,11 +378,27 @@ onMounted(async () => {
 
       <!-- Account Details -->
       <section class="rounded-md border border-zinc-200 bg-white p-6">
-        <h2 class="text-sm font-semibold text-zinc-900 mb-4">Account Details</h2>
-        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-zinc-900">Account Details</h2>
+          <button
+            v-if="!editingProfile && !profileLocked"
+            type="button"
+            class="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline"
+            @click="startEditProfile"
+          >
+            Edit
+          </button>
+          <span v-else-if="profileLocked" class="text-xs font-medium text-amber-600 flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Locked
+          </span>
+        </div>
+
+        <!-- View mode -->
+        <dl v-if="!editingProfile" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
             <dt class="text-zinc-500">Name</dt>
-            <dd class="text-zinc-900">{{ auth.user?.first_name }} {{ auth.user?.last_name }}</dd>
+            <dd class="text-zinc-900">{{ auth.user?.first_name || '—' }} {{ auth.user?.last_name || '' }}</dd>
           </div>
           <div>
             <dt class="text-zinc-500">Email</dt>
@@ -300,20 +416,85 @@ onMounted(async () => {
             </dd>
           </div>
         </dl>
+
+        <!-- Edit mode -->
+        <form v-else @submit.prevent="saveProfile" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <Label>First Name</Label>
+              <Input v-model="profileFirstName" type="text" required />
+            </div>
+            <div class="space-y-2">
+              <Label>Last Name</Label>
+              <Input v-model="profileLastName" type="text" required />
+            </div>
+          </div>
+          <div class="space-y-2">
+            <Label>Phone Number</Label>
+            <Input v-model="profilePhone" type="text" placeholder="+639123456789" />
+          </div>
+
+          <p v-if="profileError" class="text-sm text-red-600">{{ profileError }}</p>
+          <p v-if="profileSuccess" class="text-sm text-green-600">{{ profileSuccess }}</p>
+
+          <div class="flex gap-2">
+            <Button type="submit" size="sm" :disabled="profileSaving">
+              {{ profileSaving ? 'Saving...' : 'Save Changes' }}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" @click="cancelEditProfile">Cancel</Button>
+          </div>
+        </form>
       </section>
 
-      <!-- Identity Lock Banner -->
-      <div v-if="auth.user?.identity_locked" class="rounded-md border border-amber-200 bg-amber-50 p-4">
-        <p class="text-sm text-amber-800 font-medium">Identity information is locked</p>
-        <p class="text-sm text-amber-600 mt-1">You cannot modify your identity documents while you have an active booking. Changes will be allowed once your bookings are completed, cancelled, or rejected.</p>
-      </div>
+      <!-- Change Password (email/password accounts only) — collapsible -->
+      <section v-if="auth.user?.auth_method !== 'google'" class="rounded-md border border-zinc-200 bg-white">
+        <button
+          type="button"
+          class="w-full flex items-center justify-between p-6"
+          @click="showPasswordSection = !showPasswordSection"
+        >
+          <h2 class="text-sm font-semibold text-zinc-900">Change Password</h2>
+          <ChevronDown v-if="!showPasswordSection" class="h-4 w-4 text-zinc-400" />
+          <ChevronUp v-else class="h-4 w-4 text-zinc-400" />
+        </button>
+
+        <div v-if="showPasswordSection" class="px-6 pb-6 border-t border-zinc-100 pt-5">
+          <form @submit.prevent="changePassword" class="space-y-4">
+            <div class="space-y-2">
+              <Label>Current Password</Label>
+              <Input v-model="currentPassword" :type="showPassword ? 'text' : 'password'" required />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <Label>New Password</Label>
+                <Input v-model="newPassword" :type="showPassword ? 'text' : 'password'" required />
+              </div>
+              <div class="space-y-2">
+                <Label>Confirm New Password</Label>
+                <Input v-model="newPassword2" :type="showPassword ? 'text' : 'password'" required />
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-zinc-600">
+              <input v-model="showPassword" type="checkbox" class="rounded" />
+              Show passwords
+            </label>
+
+            <p v-if="passwordError" class="text-sm text-red-600">{{ passwordError }}</p>
+            <p v-if="passwordSuccess" class="text-sm text-green-600">{{ passwordSuccess }}</p>
+
+            <Button type="submit" size="sm" :disabled="passwordSaving">
+              {{ passwordSaving ? 'Changing...' : 'Update Password' }}
+            </Button>
+          </form>
+        </div>
+      </section>
 
       <!-- Identity Documents -->
       <section class="rounded-md border border-zinc-200 bg-white p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-zinc-900">Identity Documents</h2>
           <button
-            v-if="!showAddForm && editingDocId === null && !auth.user?.identity_locked"
+            v-if="!showAddForm && editingDocId === null && !profileLocked"
             type="button"
             class="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline"
             @click="showAddForm = true"
@@ -413,7 +594,7 @@ onMounted(async () => {
 
               <!-- Buttons -->
               <div class="flex gap-2 pt-2">
-                <template v-if="editingDocId === doc.id && !auth.user?.identity_locked">
+                <template v-if="editingDocId === doc.id && !profileLocked">
                   <Button type="button" @click="submitDocument" :disabled="submittingDoc" size="sm">
                     {{ submittingDoc ? 'Saving...' : 'Save Changes' }}
                   </Button>
@@ -422,7 +603,7 @@ onMounted(async () => {
                 <template v-else-if="editingDocId === doc.id">
                   <Button type="button" variant="ghost" size="sm" @click="closeForm()">Close</Button>
                 </template>
-                <template v-else-if="!auth.user?.identity_locked">
+                <template v-else-if="!profileLocked">
                   <Button variant="outline" size="sm" @click="startEdit(doc)">
                     <Pencil class="h-3.5 w-3.5 mr-1.5" /> Edit
                   </Button>

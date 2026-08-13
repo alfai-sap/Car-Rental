@@ -18,7 +18,9 @@ from .models import User, IdentityDocument
 from .serializers import (
     RegisterSerializer,
     LoginSerializer,
+    GoogleAuthSerializer,
     UserSerializer,
+    ProfileSerializer,
     IdentityDocumentSerializer,
     VerifyEmailSerializer,
     PasswordResetRequestSerializer,
@@ -28,18 +30,21 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
-# ── Identity lock constants ──
-ACTIVE_BOOKING_STATUSES = [
-    'pending_approval', 'approved', 'awaiting_payment',
-    'confirmed', 'waiting_for_pickup', 'active',
-]
-LOCKED_MESSAGE = 'Identity information cannot be modified while you have an active booking.'
+# ── Profile lock constants ──
+# The entire profile (personal info + identity documents) is locked while the
+# customer has any booking that is NOT in a final state.  A booking is final
+# once it is cancelled, rejected, or completed.
+FINAL_BOOKING_STATUSES = ['completed', 'cancelled', 'rejected']
+LOCKED_MESSAGE = 'Your profile information cannot be modified while you have an active booking request.'
+LOCKED_TITLE = 'Profile is locked'
 
 
 def has_active_bookings(user):
-    """Return True if the user has any booking that locks identity documents."""
+    """Return True if the user has any non-final booking that locks the profile."""
     from apps.bookings.models import Booking
-    return Booking.objects.filter(customer=user, status__in=ACTIVE_BOOKING_STATUSES).exists()
+    return Booking.objects.filter(customer=user).exclude(
+        status__in=FINAL_BOOKING_STATUSES,
+    ).exists()
 
 
 def get_tokens_for_user(user):
@@ -126,6 +131,101 @@ class RegisterView(views.APIView):
                 'detail': 'Account created. Please check your email to verify your account.'
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GoogleAuthView(views.APIView):
+    """Authenticate a customer using a Google ID token.
+
+    The frontend sends the raw Google ID token (`credential`).  The backend
+    verifies the token signature with Google using `GOOGLE_CLIENT_ID`, then
+    provisions or authenticates the matching user.  Knowing an email address
+    alone is never sufficient — Google must have authenticated the person.
+    """
+    permission_classes = [AllowAny]
+    throttle_scope = 'registration'
+
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        credential = serializer.validated_data['credential']
+        client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '')
+        if not client_id:
+            return Response(
+                {'detail': 'Google Sign-In is not configured on the server.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+
+            idinfo = id_token.verify_oauth2_token(
+                credential,
+                google_requests.Request(),
+                client_id,
+            )
+        except ValueError:
+            logger.warning('Google Sign-In: invalid or expired ID token')
+            return Response(
+                {'detail': 'Invalid Google token.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        except Exception as e:
+            logger.error('Google Sign-In verification failed: %s', e)
+            return Response(
+                {'detail': 'Unable to verify Google token.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        email = (idinfo.get('email') or '').strip().lower()
+        if not email:
+            return Response(
+                {'detail': 'Google token did not contain a verified email.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            # Provision a new account — no application password required.
+            user = User.objects.create_user(
+                email=email,
+                password=None,
+                first_name=idinfo.get('given_name', ''),
+                last_name=idinfo.get('family_name', ''),
+                is_verified=True,
+                verified_at=timezone.now(),
+                auth_method=User.AUTH_METHOD_GOOGLE,
+                is_active=True,
+            )
+            logger.info('Google Sign-In: provisioned new account for %s', email)
+        elif user.auth_method != User.AUTH_METHOD_GOOGLE:
+            # Email/password account already exists — do not silently merge
+            # or replace the existing authentication method.
+            return Response(
+                {
+                    'detail': 'An account with this email already exists. '
+                              'Please sign in with your email and password.',
+                    'code': 'account_exists',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Google accounts are verified by virtue of Google authentication.
+        if not user.is_verified:
+            user.is_verified = True
+            user.verified_at = timezone.now()
+            user.save(update_fields=['is_verified', 'verified_at'])
+
+        user.clear_failed_attempts()
+        tokens = get_tokens_for_user(user)
+        response = Response({
+            'user': UserSerializer(user).data,
+            'access': tokens['access'],
+        })
+        _set_refresh_cookie(response, tokens['refresh'])
+        return response
 
 
 class LoginView(views.APIView):
@@ -245,72 +345,99 @@ class MeView(views.APIView):
 
     def get(self, request):
         data = UserSerializer(request.user).data
-        data['identity_locked'] = has_active_bookings(request.user)
+        data['profile_locked'] = has_active_bookings(request.user)
+        # Backwards-compatible alias used by older frontend builds
+        data['identity_locked'] = data['profile_locked']
         return Response(data)
 
     def put(self, request):
-        """Update profile fields (first_name, last_name, phone) and/or password."""
-        user = request.user
-        updated = False
+        """Update profile fields (first_name, last_name, phone).
 
-        # ── Profile fields ──
+        The entire profile is locked while the customer has any non-final
+        booking.  Only password change remains available during that window.
+        """
+        user = request.user
+
+        if has_active_bookings(user):
+            return Response({'detail': LOCKED_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ProfileSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        updated = False
         for field in ('first_name', 'last_name', 'phone'):
-            if field in request.data:
-                setattr(user, field, request.data[field])
+            if field in serializer.validated_data:
+                setattr(user, field, serializer.validated_data[field])
                 updated = True
 
-        if updated:
-            user.save(update_fields=[f for f in ('first_name', 'last_name', 'phone') if f in request.data])
+        if not updated:
+            return Response({'detail': 'No changes provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ── Password change ──
+        user.save(update_fields=[f for f in ('first_name', 'last_name', 'phone') if f in serializer.validated_data])
+
+        data = UserSerializer(user).data
+        data['profile_locked'] = has_active_bookings(user)
+        data['identity_locked'] = data['profile_locked']
+        return Response(data)
+
+
+class PasswordChangeView(views.APIView):
+    """Change password for email/password accounts only.
+
+    Google-authenticated accounts have no application password and must use
+    Google (or the standard reset flow is disabled for them).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if user.auth_method == User.AUTH_METHOD_GOOGLE:
+            return Response(
+                {'detail': 'This account uses Google Sign-In and has no application password.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         current_password = request.data.get('current_password')
         new_password = request.data.get('new_password')
         new_password2 = request.data.get('new_password2')
 
-        if current_password or new_password or new_password2:
-            # All three fields required for password change
-            if not current_password:
-                return Response({'current_password': 'Current password is required to change password.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if not new_password:
-                return Response({'new_password': 'New password is required.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if not new_password2:
-                return Response({'new_password2': 'Please confirm your new password.'},
-                                status=status.HTTP_400_BAD_REQUEST)
+        if not current_password:
+            return Response({'current_password': 'Current password is required to change password.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not new_password:
+            return Response({'new_password': 'New password is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not new_password2:
+            return Response({'new_password2': 'Please confirm your new password.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-            if not user.check_password(current_password):
-                return Response({'current_password': 'Current password is incorrect.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if new_password != new_password2:
-                return Response({'new_password2': 'New passwords do not match.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            if current_password == new_password:
-                return Response({'new_password': 'New password must be different from current password.'},
-                                status=status.HTTP_400_BAD_REQUEST)
+        if not user.check_password(current_password):
+            return Response({'current_password': 'Current password is incorrect.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if new_password != new_password2:
+            return Response({'new_password2': 'New passwords do not match.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if current_password == new_password:
+            return Response({'new_password': 'New password must be different from current password.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-            from django.contrib.auth.password_validation import validate_password
-            from django.core.exceptions import ValidationError
-            try:
-                validate_password(new_password, user)
-            except ValidationError as e:
-                return Response({'new_password': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(new_password, user)
+        except ValidationError as e:
+            return Response({'new_password': e.messages}, status=status.HTTP_400_BAD_REQUEST)
 
-            user.set_password(new_password)
-            user.save()
+        user.set_password(new_password)
+        user.save()
 
-            # Invalidate all existing sessions
-            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
-            OutstandingToken.objects.filter(user=user).delete()
+        # Invalidate all existing sessions
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+        OutstandingToken.objects.filter(user=user).delete()
 
-            return Response({'detail': 'Password changed. Please sign in again.'})
-
-        if updated:
-            data = UserSerializer(user).data
-            data['identity_locked'] = has_active_bookings(user)
-            return Response(data)
-
-        return Response({'detail': 'No changes provided.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Password changed. Please sign in again.'})
 
 
 class IdentityDocumentUploadView(views.APIView):

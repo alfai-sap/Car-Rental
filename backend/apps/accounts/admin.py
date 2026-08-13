@@ -6,10 +6,12 @@ from .models import User, IdentityDocument
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     ordering = ['email']
-    list_display = ['email', 'first_name', 'last_name', 'is_verified', 'is_staff']
+    list_display = ['email', 'first_name', 'last_name', 'auth_method', 'is_verified', 'is_staff']
+    list_filter = ['auth_method', 'is_verified', 'is_staff']
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal info', {'fields': ('first_name', 'last_name', 'phone')}),
+        ('Authentication', {'fields': ('auth_method',)}),
         ('Verification', {'fields': ('is_verified', 'verified_at')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
@@ -17,7 +19,7 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'first_name', 'last_name', 'password1', 'password2'),
+            'fields': ('email', 'password1', 'password2'),
         }),
     )
     search_fields = ['email', 'first_name', 'last_name']

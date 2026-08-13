@@ -1,7 +1,14 @@
 import logging
+import os
+import uuid as uuid_lib
 
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.core.signing import SignatureExpired, BadSignature
 from django.db import transaction
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
@@ -28,22 +35,55 @@ logger = logging.getLogger(__name__)
 UNIT_OCCUPYING_STATUSES = ['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active']
 
 
+# ── Identity snapshot image storage ──
+# Snapshot images are immutable copies stored separately from the live
+# profile documents so that editing identity documents later does NOT
+# mutate completed transaction records.
+SNAPSHOT_IMAGE_DIR = 'identity_docs/snapshots'
+
+
+def _copy_snapshot_image(image_field):
+    """Copy an uploaded identity image into the snapshot directory.
+
+    Returns the relative storage name of the copy, or None on failure.
+    The copy is immutable — it is never touched by profile edits.
+    """
+    try:
+        ext = os.path.splitext(image_field.name)[1] or '.jpg'
+        name = f'{SNAPSHOT_IMAGE_DIR}/{uuid_lib.uuid4().hex}{ext}'
+        with image_field.open('rb') as fh:
+            content = fh.read()
+        default_storage.save(name, ContentFile(content))
+        return name
+    except Exception as e:
+        logger.exception('Failed to copy identity snapshot image: %s', e)
+        return None
+
 
 def _build_identity_snapshot(user):
-    """Capture current identity documents as an immutable JSON snapshot."""
+    """Capture full customer profile AND identity document values — including
+    immutable copies of the document photo files — as a JSON snapshot.
+
+    This snapshot is stored on the booking and is the sole source of truth
+    for what a transaction looked like at booking time.  Later changes to
+    the customer's profile or identity documents never affect it.
+    """
     docs = user.identity_documents.all()
+    documents = []
+    for idx, doc in enumerate(docs):
+        documents.append({
+            'id': doc.id,
+            'document_type': doc.document_type,
+            'document_number': doc.document_number,
+            'front_image': _copy_snapshot_image(doc.front_image) if doc.front_image else None,
+            'back_image': _copy_snapshot_image(doc.back_image) if doc.back_image else None,
+            'index': idx,
+        })
     return {
         'customer_name': f"{user.first_name} {user.last_name}",
         'customer_email': user.email,
         'customer_phone': user.phone,
-        'documents': [
-            {
-                'id': doc.id,
-                'document_type': doc.document_type,
-                'document_number': doc.document_number,
-            }
-            for doc in docs
-        ],
+        'documents': documents,
         'captured_at': timezone.now().isoformat(),
     }
 
@@ -89,6 +129,16 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         with transaction.atomic():
+            # ── Defense in depth: re-check booking eligibility server-side ──
+            # The serializer already validates this, but enforcing here
+            # guarantees no booking is created without verified email,
+            # complete profile, and identity documents on file.
+            customer = self.request.user
+            if not customer.is_booking_eligible():
+                raise serializers.ValidationError({
+                    'detail': 'You are not eligible to book. Verify your email, complete your profile, and upload identity documents.',
+                })
+
             # Lock the vehicle record to prevent race conditions during
             # availability checks (SELECT … FOR UPDATE).
             # The locked row MUST be held in a variable — otherwise the
@@ -720,3 +770,95 @@ class AdminDashboardView(APIView):
             'total': len(serializer.data),
             'bookings': serializer.data,
         })
+
+
+# ─────────────────────────────────────────────
+#  Identity snapshot image serving
+# ─────────────────────────────────────────────
+
+class IdentitySnapshotImageView(APIView):
+    """Serve immutable identity-snapshot images through signed URLs.
+
+    The snapshot contains copies of the customer's identity document photos
+    captured at booking time.  These copies are separate from the live
+    profile documents, so later profile edits never alter a completed
+    transaction's record.
+
+    Access is controlled by a short-lived signed token encoding
+    "booking_id.user_id.doc_index.side".
+    """
+    permission_classes = [AllowAny]
+    throttle_scope = 'identity_doc_image'
+
+    def get(self, request, pk, doc_index, side):
+        from apps.accounts.serializers import account_token_generator
+
+        token = request.query_params.get('token', '')
+        if not token:
+            if not request.user.is_authenticated:
+                raise Http404
+            return self._serve_authorized(request.user, pk, doc_index, side)
+
+        try:
+            signed_value = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
+        except (SignatureExpired, BadSignature):
+            raise Http404
+
+        parts = signed_value.split('.')
+        if len(parts) != 4:
+            raise Http404
+        token_booking_id, token_user_id, token_doc_index, token_side = parts
+
+        if token_booking_id != str(pk):
+            raise Http404
+        if token_doc_index != str(doc_index):
+            raise Http404
+        if token_side != side:
+            raise Http404
+
+        # If the request carries a session, double-check ownership.
+        if request.user.is_authenticated and request.user.id != int(token_user_id) and not request.user.is_staff:
+            raise Http404
+
+        booking = get_object_or_404(Booking, pk=pk)
+        if booking.customer_id != int(token_user_id):
+            raise Http404
+
+        return self._serve(booking, doc_index, side)
+
+    def _serve_authorized(self, user, pk, doc_index, side):
+        """Auth-based access fallback for API clients sending a JWT."""
+        booking = get_object_or_404(Booking, pk=pk)
+        if booking.customer != user and not user.is_staff:
+            raise Http404
+        return self._serve(booking, doc_index, side)
+
+    def _serve(self, booking, doc_index, side):
+        snapshot = booking.identity_snapshot or {}
+        documents = snapshot.get('documents', [])
+        try:
+            idx = int(doc_index)
+        except (ValueError, TypeError):
+            raise Http404
+        if idx < 0 or idx >= len(documents):
+            raise Http404
+
+        doc = documents[idx]
+        name = doc.get(f'{side}_image') if side in ('front', 'back') else None
+        if not name:
+            raise Http404
+
+        try:
+            file_handle = default_storage.open(name)
+        except (FileNotFoundError, OSError, ValueError):
+            raise Http404
+
+        ext = name.lower().rsplit('.', 1)[-1] if '.' in name else 'jpeg'
+        mime_map = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp',
+        }
+        content_type = mime_map.get(ext, 'image/jpeg')
+        return FileResponse(file_handle, content_type=content_type)

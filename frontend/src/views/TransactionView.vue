@@ -18,6 +18,23 @@ interface IdentityDoc {
   back_image: string | null
 }
 
+interface IdentitySnapshotDoc {
+  id: number
+  document_type: string
+  document_number: string
+  front_image: string | null
+  back_image: string | null
+  index?: number
+}
+
+interface IdentitySnapshot {
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  documents: IdentitySnapshotDoc[]
+  captured_at: string
+}
+
 interface VehicleImage {
   id: number
   image: string
@@ -41,6 +58,7 @@ interface Booking {
   customer_name: string
   customer_phone: string
   customer_identity_docs: IdentityDoc[]
+  identity_snapshot: IdentitySnapshot
   vehicle: number
   vehicle_name: string
   vehicle_images: VehicleImage[]
@@ -192,6 +210,10 @@ function formatTime(timeStr: string): string {
   return `${display}:${m} ${ampm}`
 }
 
+function docTypeLabel(type: string): string {
+  return type.replace(/_/g, ' ')
+}
+
 async function initiatePayment() {
   if (!booking.value) return
   paying.value = true
@@ -340,6 +362,48 @@ onMounted(fetchBooking)
           </div>
           <!-- RIGHT COLUMN -->
           <div>
+            <!-- Customer Profile -->
+            <div class="rounded-md border border-zinc-200 bg-white p-6 mb-6">
+              <h2 class="text-sm font-semibold text-zinc-900 mb-1">Your Profile</h2>
+              <p class="text-xs text-zinc-400 mb-4">These are the details captured and submitted to the administrator for verification when this booking was placed.</p>
+              <div class="space-y-3 text-sm">
+                <div>
+                  <p class="text-xs text-zinc-400">Name</p>
+                  <p class="text-zinc-900 font-medium">{{ booking.identity_snapshot?.customer_name || booking.customer_name || '—' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-zinc-400">Email</p>
+                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_email || booking.customer_email || '—' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-zinc-400">Phone</p>
+                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_phone || booking.customer_phone || '—' }}</p>
+                </div>
+              </div>
+
+              <!-- Identity Documents (immutable snapshot captured at booking) -->
+              <div v-if="booking.identity_snapshot && booking.identity_snapshot.documents && booking.identity_snapshot.documents.length > 0" class="pt-4 mt-4 border-t border-zinc-100">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Identity Documents</p>
+                <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="p-3 rounded-md bg-zinc-50 border border-zinc-100 mb-2">
+                  <p class="text-xs font-medium text-zinc-700 capitalize">{{ docTypeLabel(doc.document_type) }}</p>
+                  <p class="text-xs text-zinc-500 mb-2">{{ doc.document_number }}</p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <p class="text-[10px] text-zinc-400 mb-1">Front</p>
+                      <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
+                      <div v-else class="w-full h-20 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-zinc-400 mb-1">Back</p>
+                      <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
+                      <div v-else class="w-full h-20 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-xs text-zinc-400 pt-4 mt-4 border-t border-zinc-100">No identity documents submitted.</div>
+            </div>
+
             <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
               <h2 class="text-sm font-semibold text-zinc-900">Payment</h2>
               <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 text-center">

@@ -18,6 +18,7 @@ def _create_verified_customer(email='cust@test.com', password='Pass123!'):
     user = User.objects.create_user(
         email=email, username=email.split('@')[0],
         first_name='Test', last_name='Customer',
+        phone='+639123456789',
         password=password, is_verified=True,
     )
     return user
@@ -162,6 +163,27 @@ class BookingAPITests(TestCase):
         self.assertTrue(Notification.objects.filter(
             user=self.customer, notification_type='booking_submitted',
         ).exists())
+
+    def test_identity_snapshot_is_immutable_when_profile_changes(self):
+        """Changing the customer's identity documents later must NOT alter
+        the immutable snapshot stored on the booking."""
+        self._login_as(self.customer)
+        response = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        booking = Booking.objects.get(pk=response.data['id'])
+        original_snapshot = booking.identity_snapshot.copy()
+        original_doc_number = original_snapshot['documents'][0]['document_number']
+
+        # Simulate a profile edit: change the live identity document number
+        doc = self.customer.identity_documents.first()
+        doc.document_number = 'CHANGED-999'
+        doc.save(update_fields=['document_number', 'updated_at'])
+
+        # The booking's snapshot must remain unchanged
+        booking.refresh_from_db()
+        self.assertEqual(booking.identity_snapshot['documents'][0]['document_number'], original_doc_number)
+        self.assertNotEqual(booking.identity_snapshot['documents'][0]['document_number'], 'CHANGED-999')
 
     def test_create_booking_no_drivers_license_fails(self):
         cust2 = _create_verified_customer('nolicense@test.com')

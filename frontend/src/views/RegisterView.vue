@@ -10,44 +10,13 @@ import Label from '@/components/ui/Label.vue'
 
 const auth = useAuthStore()
 
-const countryCodes = [
-  { code: '+63', label: '🇵🇭 PH +63' },
-  { code: '+1',  label: '🇺🇸 US +1' },
-  { code: '+44', label: '🇬🇧 UK +44' },
-  { code: '+81', label: '🇯🇵 JP +81' },
-  { code: '+82', label: '🇰🇷 KR +82' },
-  { code: '+86', label: '🇨🇳 CN +86' },
-  { code: '+61', label: '🇦🇺 AU +61' },
-  { code: '+65', label: '🇸🇬 SG +65' },
-  { code: '+60', label: '🇲🇾 MY +60' },
-  { code: '+66', label: '🇹🇭 TH +66' },
-]
-
-const firstName = ref('')
-const lastName = ref('')
 const email = ref('')
-const countryCode = ref('+63')
-const phone = ref('')
 const password = ref('')
 const password2 = ref('')
 const showPassword = ref(false)
 const error = ref('')
 const loading = ref(false)
 const registered = ref(false)
-
-function formatPhone(value: string): string {
-  return value.replace(/\D/g, '').slice(0, 10)
-}
-
-function onPhoneInput(event: Event) {
-  const input = event.target as HTMLInputElement
-  phone.value = formatPhone(input.value)
-}
-
-function validatePhone(number: string): boolean {
-  // Must be exactly 10 digits
-  return /^\d{10}$/.test(number)
-}
 
 async function handleRegister() {
   loading.value = true
@@ -59,18 +28,9 @@ async function handleRegister() {
     return
   }
 
-  if (!phone.value || !validatePhone(phone.value)) {
-    error.value = 'Phone number must be exactly 10 digits.'
-    loading.value = false
-    return
-  }
-
   try {
     await auth.register({
       email: email.value,
-      first_name: firstName.value,
-      last_name: lastName.value,
-      phone: countryCode.value + phone.value,
       password: password.value,
       password2: password2.value,
     })
@@ -111,42 +71,9 @@ async function handleRegister() {
         </div>
 
         <form v-else @submit.prevent="handleRegister" class="space-y-5">
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <Label>First Name</Label>
-              <Input v-model="firstName" type="text" required />
-            </div>
-            <div class="space-y-2">
-              <Label>Last Name</Label>
-              <Input v-model="lastName" type="text" required />
-            </div>
-          </div>
-
           <div class="space-y-2">
             <Label>Email</Label>
             <Input v-model="email" type="email" required />
-          </div>
-
-          <div class="space-y-2">
-            <Label>Phone Number</Label>
-            <div class="flex gap-2">
-              <select
-                v-model="countryCode"
-                class="h-10 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-              >
-                <option v-for="c in countryCodes" :key="c.code" :value="c.code">{{ c.label }}</option>
-              </select>
-              <Input
-                :model-value="phone"
-                @input="onPhoneInput"
-                type="text"
-                inputmode="numeric"
-                placeholder="912 345 6789"
-                maxlength="10"
-                required
-                class="flex-1"
-              />
-            </div>
           </div>
 
           <div class="space-y-2">

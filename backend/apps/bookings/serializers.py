@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking, AssignmentHistory
-from apps.accounts.serializers import _identity_image_token
+from apps.accounts.serializers import _identity_image_token, _identity_snapshot_image_token
 from apps.vehicles.models import VehicleUnit
 
 # Statuses that occupy a VehicleUnit
@@ -75,8 +75,35 @@ class BookingSerializer(serializers.ModelSerializer):
         return result
 
     def get_identity_snapshot(self, obj):
-        """Return the immutable identity snapshot captured at booking time."""
-        return obj.identity_snapshot
+        """Return the immutable identity snapshot captured at booking time.
+
+        Image URLs point to immutable snapshot copies (not the live profile
+        documents), so editing the customer's identity documents later never
+        changes a completed transaction's record.
+        """
+        snapshot = obj.identity_snapshot or {}
+        documents = snapshot.get('documents', [])
+        enriched = []
+        for idx, doc in enumerate(documents):
+            front = doc.get('front_image')
+            back = doc.get('back_image')
+            item = {
+                'id': doc.get('id'),
+                'document_type': doc.get('document_type'),
+                'document_number': doc.get('document_number'),
+                'index': doc.get('index', idx),
+                'front_image': (
+                    f'/api/bookings/{obj.id}/identity-snapshot-image/{idx}/front/?token='
+                    f'{_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "front")}'
+                ) if front else None,
+                'back_image': (
+                    f'/api/bookings/{obj.id}/identity-snapshot-image/{idx}/back/?token='
+                    f'{_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "back")}'
+                ) if back else None,
+            }
+            enriched.append(item)
+        snapshot['documents'] = enriched
+        return snapshot
 
     def get_vehicle_name(self, obj):
         return f"{obj.vehicle.year} {obj.vehicle.make} {obj.vehicle.model}"
@@ -113,15 +140,20 @@ class BookingSerializer(serializers.ModelSerializer):
         return_date = data.get('return_date')
         vehicle = data.get('vehicle')
 
-        # ── Driver license check ──
-        if not customer.identity_documents.filter(document_type='drivers_license').exists():
-            raise serializers.ValidationError({
-                'identity': 'You must upload a driver\'s license before booking. Go to your profile to add it.',
-            })
-
+        # ── Booking eligibility (email verified + profile + identity) ──
         if not customer.is_verified:
             raise serializers.ValidationError({
                 'verified': 'Please verify your email address before booking.',
+            })
+
+        if not customer.is_profile_complete():
+            raise serializers.ValidationError({
+                'profile': 'Please complete your profile information before booking. Go to your profile to add it.',
+            })
+
+        if not customer.is_identity_complete():
+            raise serializers.ValidationError({
+                'identity': 'You must upload a driver\'s license before booking. Go to your profile to add it.',
             })
 
         if pickup_date and return_date:
