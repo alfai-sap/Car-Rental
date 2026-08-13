@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -130,7 +130,7 @@ const REJECT_REASONS = [
   { value: 'incomplete_info', label: 'Customer information incomplete' },
   { value: 'policy_violation', label: 'Against business policy' },
   { value: 'unreachable', label: 'Unable to contact customer' },
-  { value: 'other', label: 'Other — specify below' },
+  { value: 'other', label: 'Other â€” specify below' },
 ]
 
 const STEPS = [
@@ -166,15 +166,15 @@ function stepState(stepIndex: number, currentIdx: number, status: string): 'done
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return 'â€”'
   if (dateStr.includes('T')) return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return 'â€”'
   const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return '—'
+  if (isNaN(d.getTime())) return 'â€”'
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
@@ -269,7 +269,7 @@ async function completeTransaction() {
   } finally { completingTransaction.value = false }
 }
 
-// ── Unit Assignment ──
+// â”€â”€ Unit Assignment â”€â”€
 
 async function loadAvailableUnits() {
   if (!booking.value) return
@@ -375,8 +375,8 @@ onMounted(fetchBooking)
         </RouterLink>
 
         <div class="flex items-center gap-3 mb-8">
-          <div class="h-10 w-10 rounded-full bg-zinc-900 flex items-center justify-center">
-            <Shield class="h-5 w-5 text-white" />
+          <div class="h-10 w-10 rounded-full bg-ink flex items-center justify-center">
+            <Shield class="h-5 w-5 text-ink-foreground" />
           </div>
           <div>
             <h1 class="text-2xl font-semibold text-zinc-900">Transaction Details</h1>
@@ -385,12 +385,12 @@ onMounted(fetchBooking)
         </div>
 
         <!-- Progress Steps -->
-        <div class="rounded-md border border-zinc-200 bg-white p-6 mb-8 overflow-x-auto">
+        <div class="rounded-md border border-zinc-200 bg-surface p-6 mb-8 overflow-x-auto">
           <div class="flex items-center min-w-[600px]">
             <template v-for="(step, idx) in STEPS" :key="step.key">
               <div class="flex flex-col items-center" style="width:60px;flex-shrink:0">
                 <div class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium" :class="{
-                  'bg-zinc-900 text-white': stepState(idx, currentIdx, booking.status) === 'done' || stepState(idx, currentIdx, booking.status) === 'current',
+                  'bg-ink text-ink-foreground': stepState(idx, currentIdx, booking.status) === 'done' || stepState(idx, currentIdx, booking.status) === 'current',
                   'bg-zinc-100 text-zinc-400': stepState(idx, currentIdx, booking.status) === 'upcoming',
                   'bg-red-100 text-red-600': stepState(idx, currentIdx, booking.status) === 'rejected',
                   'bg-zinc-200 text-zinc-500 line-through': stepState(idx, currentIdx, booking.status) === 'cancelled',
@@ -416,7 +416,7 @@ onMounted(fetchBooking)
           <!-- Left: Booking Details -->
           <div class="lg:col-span-2 space-y-6">
             <!-- Customer: Current Profile vs Snapshot (side by side) -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Customer</h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -435,7 +435,7 @@ onMounted(fetchBooking)
                   </div>
 
                   <div v-if="booking.customer_identity_docs && booking.customer_identity_docs.length > 0" class="space-y-2">
-                    <div v-for="doc in booking.customer_identity_docs" :key="doc.id" class="rounded bg-white border border-zinc-100 p-2">
+                    <div v-for="doc in booking.customer_identity_docs" :key="doc.id" class="rounded bg-surface border border-zinc-100 p-2">
                       <p class="text-[11px] font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
                       <p class="text-[11px] text-zinc-500">{{ doc.document_number }}</p>
                       <div class="grid grid-cols-2 gap-1.5 mt-1.5">
@@ -462,14 +462,14 @@ onMounted(fetchBooking)
                   </p>
 
                   <div v-if="booking.identity_snapshot" class="space-y-1 text-xs">
-                    <p class="text-zinc-700"><span class="text-zinc-400">Name:</span> {{ booking.identity_snapshot.customer_name || '—' }}</p>
-                    <p class="text-zinc-700 truncate"><span class="text-zinc-400">Email:</span> {{ booking.identity_snapshot.customer_email || '—' }}</p>
-                    <p class="text-zinc-700"><span class="text-zinc-400">Phone:</span> {{ booking.identity_snapshot.customer_phone || '—' }}</p>
+                    <p class="text-zinc-700"><span class="text-zinc-400">Name:</span> {{ booking.identity_snapshot.customer_name || 'â€”' }}</p>
+                    <p class="text-zinc-700 truncate"><span class="text-zinc-400">Email:</span> {{ booking.identity_snapshot.customer_email || 'â€”' }}</p>
+                    <p class="text-zinc-700"><span class="text-zinc-400">Phone:</span> {{ booking.identity_snapshot.customer_phone || 'â€”' }}</p>
                     <p v-if="booking.identity_snapshot.captured_at" class="text-zinc-400">{{ formatDateTime(booking.identity_snapshot.captured_at) }}</p>
                   </div>
 
                   <div v-if="booking.identity_snapshot && booking.identity_snapshot.documents && booking.identity_snapshot.documents.length > 0" class="mt-3 space-y-2">
-                    <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="rounded bg-white border border-amber-100 p-2">
+                    <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="rounded bg-surface border border-amber-100 p-2">
                       <p class="text-[11px] font-medium text-zinc-700 capitalize">{{ doc.document_type.replace(/_/g, ' ') }}</p>
                       <p class="text-[11px] text-zinc-500">{{ doc.document_number }}</p>
                       <div class="grid grid-cols-2 gap-1.5 mt-1.5">
@@ -492,7 +492,7 @@ onMounted(fetchBooking)
             </div>
 
             <!-- Booking Details -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Booking Details</h2>
               <div class="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -566,12 +566,12 @@ onMounted(fetchBooking)
             </div>
 
             <!-- Cost Summary -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Cost Summary</h2>
               <div class="space-y-2">
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Daily Rate</span>
-                  <span class="text-zinc-900">₱{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span>
+                  <span class="text-zinc-900">â‚±{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Rental Days</span>
@@ -579,12 +579,12 @@ onMounted(fetchBooking)
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Subtotal</span>
-                  <span class="text-zinc-900">₱{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span>
+                  <span class="text-zinc-900">â‚±{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span>
                 </div>
                 <hr class="border-zinc-200" />
                 <div class="flex justify-between text-sm font-semibold">
                   <span class="text-zinc-900">Estimated Total</span>
-                  <span class="text-zinc-900">₱{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</span>
+                  <span class="text-zinc-900">â‚±{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</span>
                 </div>
               </div>
             </div>
@@ -592,7 +592,7 @@ onMounted(fetchBooking)
 
           <!-- Right: Admin Actions -->
           <div>
-            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6 space-y-4 sticky top-24">
               <h2 class="text-sm font-semibold text-zinc-900">Actions</h2>
 
               <!-- Pending: Approve / Reject -->
@@ -725,11 +725,11 @@ onMounted(fetchBooking)
                   <div v-for="entry in (showAllHistory ? assignmentHistory : assignmentHistory.slice(0, 5))" :key="entry.id" class="text-xs p-2 rounded bg-zinc-50 border border-zinc-100">
                     <p class="text-zinc-700">
                       <span v-if="entry.previous_plate" class="text-zinc-400 line-through">{{ entry.previous_plate }}</span>
-                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">→</span>
+                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">â†’</span>
                       <span class="font-mono font-medium text-zinc-900">{{ entry.new_plate }}</span>
                     </p>
                     <p class="text-zinc-400 mt-0.5">{{ entry.reason }}</p>
-                    <p class="text-zinc-400">{{ entry.changed_by_name }} · {{ formatDateTime(entry.created_at) }}</p>
+                    <p class="text-zinc-400">{{ entry.changed_by_name }} Â· {{ formatDateTime(entry.created_at) }}</p>
                   </div>
                   <button
                     v-if="assignmentHistory.length > 5"
@@ -758,7 +758,7 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showRejectDialog" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="closeRejectModal" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Reject Booking</h3>
           <p class="text-sm text-zinc-500">Please provide a reason for rejecting this booking request.</p>
 
@@ -767,7 +767,7 @@ onMounted(fetchBooking)
             <label class="text-xs font-medium text-zinc-700">Reason</label>
             <select
               v-model="rejectReasonType"
-              class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
               :disabled="processing"
             >
               <option v-for="reason in REJECT_REASONS" :key="reason.value" :value="reason.value">{{ reason.label }}</option>
@@ -781,7 +781,7 @@ onMounted(fetchBooking)
               v-model="rejectReasonCustom"
               rows="2"
               placeholder="Enter your reason..."
-              class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              class="w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
               :disabled="processing"
             />
           </div>
@@ -804,7 +804,7 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showRejectConfirmModal" class="fixed inset-0 z-[250] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4 text-center">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4 text-center">
           <XCircle class="h-10 w-10 text-red-500 mx-auto" />
           <h3 class="text-lg font-semibold text-zinc-900">Confirm Rejection</h3>
           <p class="text-sm text-zinc-500">Are you sure you want to reject this booking?</p>
@@ -827,14 +827,14 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showConfirmPaymentModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showConfirmPaymentModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
               <CreditCard class="h-5 w-5 text-amber-600" />
             </div>
             <div>
               <h3 class="text-lg font-semibold text-zinc-900">Confirm Payment</h3>
-              <p class="text-xs text-amber-600 font-medium">Critical action — please review</p>
+              <p class="text-xs text-amber-600 font-medium">Critical action â€” please review</p>
             </div>
           </div>
 
@@ -849,7 +849,7 @@ onMounted(fetchBooking)
             </div>
             <div class="flex justify-between">
               <span class="text-zinc-500">Total</span>
-              <span class="font-semibold text-zinc-900">₱{{ Number(booking?.estimated_total || 0).toLocaleString('en-PH') }}</span>
+              <span class="font-semibold text-zinc-900">â‚±{{ Number(booking?.estimated_total || 0).toLocaleString('en-PH') }}</span>
             </div>
           </div>
 
@@ -871,14 +871,14 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showMarkActiveModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showMarkActiveModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
               <Car class="h-5 w-5 text-blue-600" />
             </div>
             <div>
               <h3 class="text-lg font-semibold text-zinc-900">Mark as Active (Pickup)</h3>
-              <p class="text-xs text-blue-600 font-medium">Critical action — please review</p>
+              <p class="text-xs text-blue-600 font-medium">Critical action â€” please review</p>
             </div>
           </div>
 
@@ -893,7 +893,7 @@ onMounted(fetchBooking)
             </div>
             <div class="flex justify-between">
               <span class="text-zinc-500">Assigned Unit</span>
-              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || '—' }}</span>
+              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || 'â€”' }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-zinc-500">Pickup Date</span>
@@ -919,14 +919,14 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showCompleteModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showCompleteModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <CheckCircle class="h-5 w-5 text-emerald-600" />
             </div>
             <div>
               <h3 class="text-lg font-semibold text-zinc-900">Complete Transaction</h3>
-              <p class="text-xs text-emerald-600 font-medium">Final step — please review</p>
+              <p class="text-xs text-emerald-600 font-medium">Final step â€” please review</p>
             </div>
           </div>
 
@@ -941,7 +941,7 @@ onMounted(fetchBooking)
             </div>
             <div class="flex justify-between">
               <span class="text-zinc-500">Unit</span>
-              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || '—' }}</span>
+              <span class="font-semibold font-mono text-zinc-900">{{ booking?.vehicle_unit_plate || 'â€”' }}</span>
             </div>
           </div>
 
@@ -963,13 +963,13 @@ onMounted(fetchBooking)
     <Teleport to="body">
       <div v-if="showReturnDialog" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showReturnDialog = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Complete Transaction</h3>
           <p class="text-sm text-zinc-500">Select the post-return status of the vehicle unit.</p>
 
           <div class="space-y-1">
             <label class="text-xs font-medium text-zinc-700">Vehicle Status After Return</label>
-            <select v-model="returnUnitStatus" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm">
+            <select v-model="returnUnitStatus" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm">
               <option value="available">Available</option>
               <option value="maintenance">Maintenance</option>
               <option value="inactive">Inactive</option>

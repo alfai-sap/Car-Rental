@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
@@ -29,7 +29,7 @@ const error = ref('')
 const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
 
-// ── Pagination ──
+// â”€â”€ Pagination â”€â”€
 const PER_PAGE = 10
 const currentPage = ref(1)
 const totalCount = ref(0)
@@ -163,7 +163,7 @@ onMounted(() => {
         <div
           v-for="notif in notifications"
           :key="notif.id"
-          class="block rounded-lg border border-zinc-200 bg-white p-4 hover:border-zinc-300 transition-colors"
+          class="block rounded-lg border border-zinc-200 bg-surface p-4 hover:border-zinc-300 transition-colors"
           :class="{ 'border-l-4 border-l-blue-500': !notif.is_read }"
         >
           <RouterLink
@@ -182,7 +182,7 @@ onMounted(() => {
                 <p class="text-sm text-zinc-600">{{ notif.message }}</p>
                 <p class="text-xs text-zinc-400 mt-1">
                   {{ formatDate(notif.created_at) }} at {{ formatTime(notif.created_at) }}
-                  <span v-if="notif.booking_number">· {{ notif.booking_number }}</span>
+                  <span v-if="notif.booking_number">Â· {{ notif.booking_number }}</span>
                 </p>
               </div>
             </div>
@@ -217,7 +217,7 @@ onMounted(() => {
             :key="page"
             @click="goToPage(page)"
             class="h-8 w-8 rounded text-sm font-medium transition-colors"
-            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+            :class="page === currentPage ? 'bg-ink text-ink-foreground' : 'text-zinc-600 hover:bg-zinc-100'"
           >
             {{ page }}
           </button>

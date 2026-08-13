@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
@@ -12,7 +12,7 @@ import {
 
 const auth = useAuthStore()
 
-// ── Types ──
+// â”€â”€ Types â”€â”€
 interface AuditActor {
   id: number
   name: string
@@ -47,7 +47,7 @@ interface ActionStats {
   [key: string]: number
 }
 
-// ── State ──
+// â”€â”€ State â”€â”€
 const loading = ref(true)
 const error = ref('')
 const entries = ref<AuditEntry[]>([])
@@ -76,7 +76,7 @@ const ACTION_OPTIONS = [
   { key: 'booking_marked_waiting', label: 'Marked Waiting', icon: Clock },
 ]
 
-// ── Fetch ──
+// â”€â”€ Fetch â”€â”€
 async function fetchLogs() {
   loading.value = true
   error.value = ''
@@ -116,7 +116,7 @@ watch(selectedActions, () => {
   fetchLogs()
 }, { deep: true })
 
-// ── Helpers ──
+// â”€â”€ Helpers â”€â”€
 function toggleActionFilter(key: string) {
   const idx = selectedActions.value.indexOf(key)
   if (idx >= 0) {
@@ -214,14 +214,14 @@ const totalActionsToday = computed(() =>
         >
           <ListFilter class="w-4 h-4" />
           <span>Action</span>
-          <span v-if="selectedActions.length > 0" class="ml-1 px-1.5 py-0.5 rounded-full bg-zinc-900 text-white text-xs">
+          <span v-if="selectedActions.length > 0" class="ml-1 px-1.5 py-0.5 rounded-full bg-ink text-ink-foreground text-xs">
             {{ selectedActions.length }}
           </span>
         </button>
 
         <div
           v-if="filterDropdownOpen"
-          class="absolute right-0 top-full mt-1 w-56 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 py-1"
+          class="absolute right-0 top-full mt-1 w-56 bg-surface border border-zinc-200 rounded-lg shadow-lg z-50 py-1"
         >
           <div
             v-for="opt in ACTION_OPTIONS"
@@ -288,7 +288,7 @@ const totalActionsToday = computed(() =>
     </div>
 
     <!-- Table -->
-    <div v-else class="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+    <div v-else class="bg-surface border border-zinc-200 rounded-lg overflow-hidden">
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-zinc-200 bg-zinc-50 text-left">
@@ -350,7 +350,7 @@ const totalActionsToday = computed(() =>
                   {{ entry.booking.booking_number }}
                 </RouterLink>
               </span>
-              <span v-else class="text-xs text-zinc-300">—</span>
+              <span v-else class="text-xs text-zinc-300">â€”</span>
             </td>
 
             <!-- State Change -->
@@ -359,12 +359,12 @@ const totalActionsToday = computed(() =>
                 <span v-if="Object.keys(entry.before_state).length" class="text-zinc-500">
                   {{ Object.entries(entry.before_state).map(([k, v]) => `${k}: ${v}`).join(', ') }}
                 </span>
-                <span v-else class="text-zinc-300">—</span>
-                <span class="text-zinc-300">→</span>
+                <span v-else class="text-zinc-300">â€”</span>
+                <span class="text-zinc-300">â†’</span>
                 <span v-if="Object.keys(entry.after_state).length" class="text-zinc-700 font-medium">
                   {{ Object.entries(entry.after_state).map(([k, v]) => `${k}: ${v}`).join(', ') }}
                 </span>
-                <span v-else class="text-zinc-300">—</span>
+                <span v-else class="text-zinc-300">â€”</span>
               </div>
             </td>
 
@@ -382,7 +382,7 @@ const totalActionsToday = computed(() =>
     <!-- Pagination -->
     <div v-if="totalPages > 1" class="flex items-center justify-between mt-6">
       <p class="text-sm text-zinc-500">
-        Showing {{ ((currentPage - 1) * pageSize) + 1 }}–{{ Math.min(currentPage * pageSize, totalCount) }}
+        Showing {{ ((currentPage - 1) * pageSize) + 1 }}â€“{{ Math.min(currentPage * pageSize, totalCount) }}
         of {{ totalCount }} entries
       </p>
       <div class="flex items-center gap-1">
@@ -400,7 +400,7 @@ const totalActionsToday = computed(() =>
           @click="goToPage(page)"
           class="px-3 py-1.5 rounded-md text-sm border transition-colors"
           :class="page === currentPage
-            ? 'bg-zinc-900 text-white border-zinc-900'
+            ? 'bg-ink text-ink-foreground border-zinc-900'
             : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'"
         >
           {{ page }}

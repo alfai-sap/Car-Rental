@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -299,7 +299,7 @@ onMounted(() => {
               v-model="searchQuery"
               type="text"
               placeholder="Search bookings..."
-              class="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              class="h-9 w-full rounded-md border border-zinc-300 bg-surface pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
             />
           </div>
 
@@ -307,7 +307,7 @@ onMounted(() => {
           <div class="relative">
             <button
               @click="filterDropdownOpen = !filterDropdownOpen"
-              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
             >
               <ListFilter class="h-4 w-4 text-zinc-400" />
               <span>{{ STATUS_TABS.find(t => t.key === activeTab)?.label || 'All' }}</span>
@@ -316,7 +316,7 @@ onMounted(() => {
             </button>
             <div
               v-if="filterDropdownOpen"
-              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
               @mouseleave="filterDropdownOpen = false"
             >
               <div class="p-1">
@@ -338,7 +338,7 @@ onMounted(() => {
           <div class="relative">
             <button
               @click="sortDropdownOpen = !sortDropdownOpen"
-              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
             >
               <ArrowUpDown class="h-4 w-4 text-zinc-400" />
               <span>{{ SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort' }}</span>
@@ -346,7 +346,7 @@ onMounted(() => {
             </button>
             <div
               v-if="sortDropdownOpen"
-              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
               @mouseleave="sortDropdownOpen = false"
             >
               <div class="p-1">
@@ -369,7 +369,7 @@ onMounted(() => {
           <div
             v-for="booking in paginatedBookings"
             :key="booking.id"
-            class="rounded-md border border-zinc-200 bg-white overflow-hidden"
+            class="rounded-md border border-zinc-200 bg-surface overflow-hidden"
           >
             <!-- Header row -->
             <button
@@ -392,7 +392,7 @@ onMounted(() => {
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-zinc-900 truncate">{{ booking.vehicle_name }}</p>
                 <p class="text-xs text-zinc-500">
-                  {{ formatDate(booking.pickup_date) }} — {{ formatDate(booking.return_date) }}
+                  {{ formatDate(booking.pickup_date) }} â€” {{ formatDate(booking.return_date) }}
                   ({{ booking.rental_days }} day{{ booking.rental_days > 1 ? 's' : '' }})
                 </p>
               </div>
@@ -425,7 +425,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <p class="text-xs text-zinc-400">Estimated Total</p>
-                  <p class="text-sm font-semibold text-zinc-900">₱{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</p>
+                  <p class="text-sm font-semibold text-zinc-900">â‚±{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</p>
                 </div>
               </div>
 
@@ -471,7 +471,7 @@ onMounted(() => {
             :key="page"
             @click="goToPage(page)"
             class="h-8 w-8 flex items-center justify-center rounded text-xs font-medium transition-colors"
-            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+            :class="page === currentPage ? 'bg-ink text-ink-foreground' : 'text-zinc-600 hover:bg-zinc-100'"
           >
             {{ page }}
           </button>

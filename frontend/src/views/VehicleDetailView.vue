@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -85,17 +85,17 @@ function resetZoom() {
 }
 
 function formatPrice(price: string): string {
-  return `₱${Number(price).toLocaleString('en-PH')}/day`
+  return `â‚±${Number(price).toLocaleString('en-PH')}/day`
 }
 
 const weeklyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${(Number(vehicle.value.price_per_day) * 7).toLocaleString('en-PH')}/week`
+  return `â‚±${(Number(vehicle.value.price_per_day) * 7).toLocaleString('en-PH')}/week`
 })
 
 const monthlyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${(Number(vehicle.value.price_per_day) * 30).toLocaleString('en-PH')}/month`
+  return `â‚±${(Number(vehicle.value.price_per_day) * 30).toLocaleString('en-PH')}/month`
 })
 
 onMounted(async () => {
@@ -172,14 +172,14 @@ onMounted(async () => {
             <button
               v-if="vehicle.images.length > 1"
               @click="prevImage"
-              class="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+              class="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center hover:bg-surface transition shadow-sm"
             >
               <ChevronLeft class="h-5 w-5 text-zinc-700" />
             </button>
             <button
               v-if="vehicle.images.length > 1"
               @click="nextImage"
-              class="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+              class="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center hover:bg-surface transition shadow-sm"
             >
               <ChevronRight class="h-5 w-5 text-zinc-700" />
             </button>
@@ -212,7 +212,7 @@ onMounted(async () => {
           <div class="lg:col-span-2 space-y-6">
             <div>
               <h1 class="text-2xl font-semibold text-zinc-900">{{ vehicle.make }} {{ vehicle.model }}</h1>
-              <p class="text-zinc-500">{{ vehicle.year }} · {{ vehicle.type }}</p>
+              <p class="text-zinc-500">{{ vehicle.year }} Â· {{ vehicle.type }}</p>
             </div>
 
             <!-- Description -->
@@ -242,7 +242,7 @@ onMounted(async () => {
           </div>
 
           <!-- Sidebar -->
-          <div class="rounded-lg border border-zinc-200 bg-white p-6 h-fit space-y-4">
+          <div class="rounded-lg border border-zinc-200 bg-surface p-6 h-fit space-y-4">
             <div>
               <p class="text-2xl font-bold text-zinc-900">{{ formatPrice(vehicle.price_per_day) }}</p>
               <div class="flex gap-3 mt-2">
@@ -330,14 +330,14 @@ onMounted(async () => {
         <button
           v-if="vehicle && vehicle.images.length > 1"
           @click.stop="prevImage"
-          class="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
+          class="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-surface/20 flex items-center justify-center hover:bg-surface/30"
         >
           <ChevronLeft class="h-6 w-6 text-white" />
         </button>
         <button
           v-if="vehicle && vehicle.images.length > 1"
           @click.stop="nextImage"
-          class="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
+          class="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-surface/20 flex items-center justify-center hover:bg-surface/30"
         >
           <ChevronRight class="h-6 w-6 text-white" />
         </button>

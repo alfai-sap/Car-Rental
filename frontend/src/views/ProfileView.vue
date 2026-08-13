@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
@@ -13,7 +13,7 @@ const error = ref('')
 const success = ref('')
 const resendingVerification = ref(false)
 
-// ── Profile editing state ──
+// â”€â”€ Profile editing state â”€â”€
 const editingProfile = ref(false)
 const profileFirstName = ref('')
 const profileLastName = ref('')
@@ -22,7 +22,7 @@ const profileSaving = ref(false)
 const profileError = ref('')
 const profileSuccess = ref('')
 
-// ── Password change state ──
+// â”€â”€ Password change state â”€â”€
 const showPasswordSection = ref(false)
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -153,8 +153,8 @@ const docSuccess = ref('')
 const expandedDocId = ref<number | null>(null)
 const confirmDeleteId = ref<number | null>(null)
 
-// ── Per-document-type placeholder examples ──
-// No format validation is enforced — the placeholder is a visual guide only.
+// â”€â”€ Per-document-type placeholder examples â”€â”€
+// No format validation is enforced â€” the placeholder is a visual guide only.
 const DOCUMENT_FORMATS: Record<string, { placeholder: string }> = {
   drivers_license: { placeholder: 'XXX00-00-000000' },
   passport:         { placeholder: 'X0000000' },
@@ -195,7 +195,7 @@ function onDocTypeChange(event: Event) {
   documentType.value = select.value
 }
 
-// No special formatting — just trim whitespace before submitting
+// No special formatting â€” just trim whitespace before submitting
 function getRawDocumentNumber(): string {
   return documentNumber.value.trim()
 }
@@ -377,7 +377,7 @@ onMounted(async () => {
       </div>
 
       <!-- Account Details -->
-      <section class="rounded-md border border-zinc-200 bg-white p-6">
+      <section class="rounded-md border border-zinc-200 bg-surface p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-zinc-900">Account Details</h2>
           <button
@@ -398,7 +398,7 @@ onMounted(async () => {
         <dl v-if="!editingProfile" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
             <dt class="text-zinc-500">Name</dt>
-            <dd class="text-zinc-900">{{ auth.user?.first_name || '—' }} {{ auth.user?.last_name || '' }}</dd>
+            <dd class="text-zinc-900">{{ auth.user?.first_name || 'â€”' }} {{ auth.user?.last_name || '' }}</dd>
           </div>
           <div>
             <dt class="text-zinc-500">Email</dt>
@@ -406,7 +406,7 @@ onMounted(async () => {
           </div>
           <div>
             <dt class="text-zinc-500">Phone</dt>
-            <dd class="text-zinc-900">{{ auth.user?.phone || '—' }}</dd>
+            <dd class="text-zinc-900">{{ auth.user?.phone || 'â€”' }}</dd>
           </div>
           <div>
             <dt class="text-zinc-500">Status</dt>
@@ -446,8 +446,8 @@ onMounted(async () => {
         </form>
       </section>
 
-      <!-- Change Password (email/password accounts only) — collapsible -->
-      <section v-if="auth.user?.auth_method !== 'google'" class="rounded-md border border-zinc-200 bg-white">
+      <!-- Change Password (email/password accounts only) â€” collapsible -->
+      <section v-if="auth.user?.auth_method !== 'google'" class="rounded-md border border-zinc-200 bg-surface">
         <button
           type="button"
           class="w-full flex items-center justify-between p-6"
@@ -490,7 +490,7 @@ onMounted(async () => {
       </section>
 
       <!-- Identity Documents -->
-      <section class="rounded-md border border-zinc-200 bg-white p-6">
+      <section class="rounded-md border border-zinc-200 bg-surface p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-sm font-semibold text-zinc-900">Identity Documents</h2>
           <button
@@ -547,7 +547,7 @@ onMounted(async () => {
                 <select
                   v-model="documentType"
                   @change="onDocTypeChange"
-                  class="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                  class="h-10 w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
                 >
                   <option value="drivers_license">Driver's License</option>
                   <option value="passport">Passport</option>
@@ -629,7 +629,7 @@ onMounted(async () => {
             <select
               v-model="documentType"
               @change="onDocTypeChange"
-              class="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+              class="h-10 w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
             >
               <option value="drivers_license">Driver's License</option>
               <option value="passport">Passport</option>
@@ -745,7 +745,7 @@ onMounted(async () => {
         class="fixed inset-0 z-50 flex items-center justify-center"
       >
         <div class="absolute inset-0 bg-black/30" @click="confirmDeleteId = null" />
-        <div class="relative bg-white rounded-lg border border-zinc-200 shadow-lg max-w-sm w-full mx-4 p-6">
+        <div class="relative bg-surface rounded-lg border border-zinc-200 shadow-lg max-w-sm w-full mx-4 p-6">
           <h3 class="text-sm font-semibold text-zinc-900 mb-2">Delete Document</h3>
           <p class="text-sm text-zinc-500 mb-6">
             Are you sure you want to delete this document? This action cannot be undone.

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
@@ -107,7 +107,7 @@ function goToPage(page: number) {
   currentPage.value = Math.max(1, Math.min(page, totalPages.value))
 }
 
-// ── Create vehicle modal ──
+// â”€â”€ Create vehicle modal â”€â”€
 const showCreateModal = ref(false)
 const creating = ref(false)
 const createError = ref('')
@@ -138,7 +138,7 @@ async function submitCreateVehicle() {
   creating.value = true
   createError.value = ''
 
-  // ── Client-side validation ──
+  // â”€â”€ Client-side validation â”€â”€
   const errors: string[] = []
   const f = createForm.value
   if (!f.make.trim()) errors.push('Make is required.')
@@ -225,7 +225,7 @@ async function fetchVehicles() {
 }
 
 function formatPrice(price: string): string {
-  return `₱${Number(price).toLocaleString('en-PH')}/day`
+  return `â‚±${Number(price).toLocaleString('en-PH')}/day`
 }
 
 function statusBadgeClass(status: string): string {
@@ -266,14 +266,14 @@ onMounted(fetchVehicles)
             v-model="searchQuery"
             type="text"
             placeholder="Search vehicles..."
-            class="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            class="h-9 w-full rounded-md border border-zinc-300 bg-surface pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
           />
         </div>
 
         <div class="relative">
           <button
             @click="filterDropdownOpen = !filterDropdownOpen"
-            class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+            class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
           >
             <ListFilter class="h-4 w-4 text-zinc-400" />
             <span>{{ STATUS_TABS.find(t => t.key === activeTab)?.label || 'All' }}</span>
@@ -281,7 +281,7 @@ onMounted(fetchVehicles)
           </button>
           <div
             v-if="filterDropdownOpen"
-            class="absolute left-0 mt-1 w-40 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+            class="absolute left-0 mt-1 w-40 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
             @mouseleave="filterDropdownOpen = false"
           >
             <div class="p-1">
@@ -301,7 +301,7 @@ onMounted(fetchVehicles)
         <div class="relative">
           <button
             @click="sortDropdownOpen = !sortDropdownOpen"
-            class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+            class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
           >
             <ArrowUpDown class="h-4 w-4 text-zinc-400" />
             <span>{{ SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort' }}</span>
@@ -309,7 +309,7 @@ onMounted(fetchVehicles)
           </button>
           <div
             v-if="sortDropdownOpen"
-            class="absolute left-0 mt-1 w-44 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+            class="absolute left-0 mt-1 w-44 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
             @mouseleave="sortDropdownOpen = false"
           >
             <div class="p-1">
@@ -358,7 +358,7 @@ onMounted(fetchVehicles)
             v-for="vehicle in paginatedVehicles"
             :key="vehicle.id"
             :to="`/admin/vehicles/${vehicle.id}`"
-            class="block rounded-md border border-zinc-200 bg-white p-4 hover:border-zinc-400 transition-colors cursor-pointer"
+            class="block rounded-md border border-zinc-200 bg-surface p-4 hover:border-zinc-400 transition-colors cursor-pointer"
           >
             <div class="flex items-start gap-4">
               <div class="h-16 w-24 rounded-md bg-zinc-100 overflow-hidden flex-shrink-0">
@@ -380,7 +380,7 @@ onMounted(fetchVehicles)
                     {{ vehicle.status.charAt(0).toUpperCase() + vehicle.status.slice(1) }}
                   </span>
                 </div>
-                <p class="text-xs text-zinc-500">{{ vehicle.year }} · {{ vehicle.type }} · {{ vehicle.transmission }} · {{ vehicle.fuel }} · {{ vehicle.seats }} seats</p>
+                <p class="text-xs text-zinc-500">{{ vehicle.year }} Â· {{ vehicle.type }} Â· {{ vehicle.transmission }} Â· {{ vehicle.fuel }} Â· {{ vehicle.seats }} seats</p>
                 <p class="text-sm font-medium text-zinc-800 mt-1">{{ formatPrice(vehicle.price_per_day) }}</p>
               </div>
             </div>
@@ -401,7 +401,7 @@ onMounted(fetchVehicles)
             :key="page"
             @click="goToPage(page)"
             class="h-8 w-8 flex items-center justify-center rounded text-xs font-medium transition-colors"
-            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+            :class="page === currentPage ? 'bg-ink text-ink-foreground' : 'text-zinc-600 hover:bg-zinc-100'"
           >
             {{ page }}
           </button>
@@ -420,7 +420,7 @@ onMounted(fetchVehicles)
     <Teleport to="body">
       <div v-if="showCreateModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showCreateModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-zinc-900">Add New Vehicle</h2>
             <button @click="showCreateModal = false" class="p-1 rounded hover:bg-zinc-100"><X class="h-5 w-5 text-zinc-400" /></button>
@@ -462,7 +462,7 @@ onMounted(fetchVehicles)
               <input v-model.number="createForm.seats" type="number" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
             </div>
             <div class="space-y-1">
-              <label class="text-xs font-medium text-zinc-700">Price per Day (₱)</label>
+              <label class="text-xs font-medium text-zinc-700">Price per Day (â‚±)</label>
               <input v-model="createForm.price_per_day" type="number" step="0.01" placeholder="1500.00" class="h-9 w-full rounded-md border border-zinc-300 px-3 text-sm" />
             </div>
           </div>

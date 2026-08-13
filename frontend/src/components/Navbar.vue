@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { User } from 'lucide-vue-next'
+import { useThemeStore } from '@/stores/theme'
+import { User, Moon, Sun } from 'lucide-vue-next'
 import Button from '@/components/ui/Button.vue'
 
 const auth = useAuthStore()
+const themeStore = useThemeStore()
 const router = useRouter()
 const dropdownOpen = ref(false)
 
@@ -33,7 +35,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <header class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-zinc-200">
+  <header class="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-sm border-b border-zinc-200">
     <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-4">
       <div class="flex items-center justify-between h-16">
         <RouterLink
@@ -45,14 +47,25 @@ onMounted(async () => {
 
         <div class="flex-1" />
 
+        <!-- Theme toggle -->
+        <button
+          type="button"
+          aria-label="Toggle theme"
+          class="mr-3 h-9 w-9 inline-flex items-center justify-center rounded-full text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition"
+          @click="themeStore.toggleTheme()"
+        >
+          <Sun v-if="themeStore.theme === 'dark'" class="h-4 w-4" />
+          <Moon v-else class="h-4 w-4" />
+        </button>
+
         <!-- Authenticated state -->
         <div v-if="auth.isAuthenticated && auth.user" class="relative">
           <button
             @click="toggleDropdown"
             class="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-zinc-200 focus:outline-none transition relative"
           >
-            <div class="h-9 w-9 rounded-full bg-zinc-800 flex items-center justify-center">
-              <User class="h-4 w-4 text-white" />
+            <div class="h-9 w-9 rounded-full bg-ink flex items-center justify-center">
+              <User class="h-4 w-4 text-ink-foreground" />
             </div>
             <!-- Unread notification badge -->
             <span
@@ -66,7 +79,7 @@ onMounted(async () => {
           <!-- Dropdown -->
           <div
             v-if="dropdownOpen"
-            class="absolute right-0 mt-2 w-56 rounded-md border border-zinc-200 bg-white shadow-lg z-50"
+            class="absolute right-0 mt-2 w-56 rounded-md border border-zinc-200 bg-surface shadow-lg z-50"
             @mouseleave="closeDropdown"
           >
             <div class="px-4 py-3 border-b border-zinc-100">

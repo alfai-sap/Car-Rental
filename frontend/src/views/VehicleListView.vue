@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
@@ -51,7 +51,7 @@ async function fetchVehicles() {
 }
 
 function formatPrice(price: string): string {
-  return `₱${Number(price).toLocaleString('en-PH')}/day`
+  return `â‚±${Number(price).toLocaleString('en-PH')}/day`
 }
 
 function vehicleImage(url: string | null): string {
@@ -80,22 +80,22 @@ onMounted(fetchVehicles)
           <Input v-model="search" class="pl-10" placeholder="Search make, model..." @input="fetchVehicles" />
         </div>
         <select v-model="selectedType" @change="fetchVehicles"
-          class="h-10 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+          class="h-10 rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
           <option value="">All Types</option>
           <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
         </select>
         <select v-model="selectedTransmission" @change="fetchVehicles"
-          class="h-10 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+          class="h-10 rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
           <option value="">All Transmissions</option>
           <option v-for="t in transmissions" :key="t" :value="t" class="capitalize">{{ t }}</option>
         </select>
         <select v-model="selectedFuel" @change="fetchVehicles"
-          class="h-10 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+          class="h-10 rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
           <option value="">All Fuel</option>
           <option v-for="f in fuels" :key="f" :value="f" class="capitalize">{{ f }}</option>
         </select>
         <select v-model="sortBy" @change="fetchVehicles"
-          class="h-10 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+          class="h-10 rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
           <option value="-created_at">Newest</option>
           <option value="price_per_day">Price: Low to High</option>
           <option value="-price_per_day">Price: High to Low</option>
@@ -124,7 +124,7 @@ onMounted(fetchVehicles)
           v-for="vehicle in vehicles"
           :key="vehicle.id"
           :to="`/vehicles/${vehicle.id}`"
-          class="group rounded-lg border border-zinc-200 bg-white overflow-hidden hover:border-zinc-300 hover:shadow-sm transition"
+          class="group rounded-lg border border-zinc-200 bg-surface overflow-hidden hover:border-zinc-300 hover:shadow-sm transition"
         >
           <div class="aspect-[16/10] bg-zinc-100 flex items-center justify-center overflow-hidden">
             <img
@@ -139,7 +139,7 @@ onMounted(fetchVehicles)
             <div class="flex items-start justify-between gap-2">
               <div>
                 <h3 class="font-semibold text-zinc-900">{{ vehicle.make }} {{ vehicle.model }}</h3>
-                <p class="text-sm text-zinc-500">{{ vehicle.year }} · {{ vehicle.type }}</p>
+                <p class="text-sm text-zinc-500">{{ vehicle.year }} Â· {{ vehicle.type }}</p>
               </div>
               <span class="text-sm font-semibold text-zinc-900 whitespace-nowrap">{{ formatPrice(vehicle.price_per_day) }}</span>
             </div>

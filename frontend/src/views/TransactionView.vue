@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -108,7 +108,7 @@ async function loadAssignmentHistory() {
   finally { loadingHistory.value = false }
 }
 
-// ── Cancel modal state ──
+// â”€â”€ Cancel modal state â”€â”€
 const showCancelModal = ref(false)
 const cancelReasonType = ref('')
 const cancelReasonCustom = ref('')
@@ -119,7 +119,7 @@ const CANCEL_REASONS = [
   { value: 'date_change', label: 'Need to change rental dates' },
   { value: 'vehicle_choice', label: 'Want to book a different vehicle' },
   { value: 'travel_cancelled', label: 'Travel plans cancelled' },
-  { value: 'other', label: 'Other — specify below' },
+  { value: 'other', label: 'Other â€” specify below' },
 ]
 
 function openCancelModal() {
@@ -190,15 +190,15 @@ function stepState(stepIndex: number, currentIdx: number, status: string): 'done
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return 'â€”'
   if (dateStr.includes('T')) return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '—'
+  if (!dateStr) return 'â€”'
   const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return '—'
+  if (isNaN(d.getTime())) return 'â€”'
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
@@ -251,9 +251,9 @@ const stepHint = computed(() => {
   if (!booking.value) return ''
   switch (booking.value.status) {
     case 'pending_approval': return 'Waiting for admin review'
-    case 'approved': return 'Booking approved — proceed to payment'
+    case 'approved': return 'Booking approved â€” proceed to payment'
     case 'awaiting_payment': return 'Payment required to confirm booking'
-    case 'confirmed': return 'Your booking is confirmed — prepare for pickup'
+    case 'confirmed': return 'Your booking is confirmed â€” prepare for pickup'
     case 'active': return 'Vehicle is currently rented'
     case 'completed': return 'Rental completed'
     case 'rejected': return `Rejected: ${booking.value.rejection_reason || 'No reason provided'}`
@@ -282,12 +282,12 @@ onMounted(fetchBooking)
         <p class="text-sm text-zinc-500 mb-8">{{ booking.booking_number }}</p>
 
         <!-- Progress Steps -->
-        <div class="rounded-md border border-zinc-200 bg-white p-6 mb-8 overflow-x-auto">
+        <div class="rounded-md border border-zinc-200 bg-surface p-6 mb-8 overflow-x-auto">
           <div class="flex items-center min-w-[600px]">
             <template v-for="(step, idx) in STEPS" :key="step.key">
               <div class="flex flex-col items-center" style="width:60px;flex-shrink:0">
                 <div class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium" :class="{
-                  'bg-zinc-900 text-white': stepState(idx, currentIdx, booking.status) === 'done' || stepState(idx, currentIdx, booking.status) === 'current',
+                  'bg-ink text-ink-foreground': stepState(idx, currentIdx, booking.status) === 'done' || stepState(idx, currentIdx, booking.status) === 'current',
                   'bg-zinc-100 text-zinc-400': stepState(idx, currentIdx, booking.status) === 'upcoming',
                   'bg-red-100 text-red-600': stepState(idx, currentIdx, booking.status) === 'rejected',
                   'bg-zinc-200 text-zinc-500 line-through': stepState(idx, currentIdx, booking.status) === 'cancelled',
@@ -311,7 +311,7 @@ onMounted(fetchBooking)
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <!-- LEFT COLUMN -->
           <div class="lg:col-span-2 space-y-6">
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Booking Details</h2>
               <div class="grid grid-cols-2 gap-4 mb-6">
                 <div><p class="text-xs text-zinc-400">Transaction ID</p><p class="text-sm font-mono text-zinc-900">{{ booking.booking_number }}</p></div>
@@ -349,35 +349,35 @@ onMounted(fetchBooking)
               <div v-if="booking.special_request" class="mt-4 pt-4 border-t border-zinc-100"><p class="text-xs text-zinc-400 mb-1">Special Request</p><p class="text-sm text-zinc-700">{{ booking.special_request }}</p></div>
               <div v-if="booking.rejection_reason" class="mt-4 rounded-md bg-red-50 border border-red-200 p-3"><p class="text-xs font-medium text-red-800 mb-0.5">Cancellation Reason</p><p class="text-sm text-red-700">{{ booking.rejection_reason }}</p></div>
             </div>
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Cost Summary</h2>
               <div class="space-y-2">
-                <div class="flex justify-between text-sm"><span class="text-zinc-500">Daily Rate</span><span class="text-zinc-900">₱{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span></div>
+                <div class="flex justify-between text-sm"><span class="text-zinc-500">Daily Rate</span><span class="text-zinc-900">â‚±{{ (Number(booking.subtotal) / booking.rental_days).toLocaleString('en-PH') }}</span></div>
                 <div class="flex justify-between text-sm"><span class="text-zinc-500">Rental Days</span><span class="text-zinc-900">{{ booking.rental_days }} day{{ booking.rental_days > 1 ? 's' : '' }}</span></div>
-                <div class="flex justify-between text-sm"><span class="text-zinc-500">Subtotal</span><span class="text-zinc-900">₱{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span></div>
+                <div class="flex justify-between text-sm"><span class="text-zinc-500">Subtotal</span><span class="text-zinc-900">â‚±{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span></div>
                 <hr class="border-zinc-200" />
-                <div class="flex justify-between text-sm font-semibold"><span class="text-zinc-900">Estimated Total</span><span class="text-zinc-900">₱{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</span></div>
+                <div class="flex justify-between text-sm font-semibold"><span class="text-zinc-900">Estimated Total</span><span class="text-zinc-900">â‚±{{ Number(booking.estimated_total).toLocaleString('en-PH') }}</span></div>
               </div>
             </div>
           </div>
           <!-- RIGHT COLUMN -->
           <div>
             <!-- Customer Profile -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6 mb-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6 mb-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-1">Your Profile</h2>
               <p class="text-xs text-zinc-400 mb-4">These are the details captured and submitted to the administrator for verification when this booking was placed.</p>
               <div class="space-y-3 text-sm">
                 <div>
                   <p class="text-xs text-zinc-400">Name</p>
-                  <p class="text-zinc-900 font-medium">{{ booking.identity_snapshot?.customer_name || booking.customer_name || '—' }}</p>
+                  <p class="text-zinc-900 font-medium">{{ booking.identity_snapshot?.customer_name || booking.customer_name || 'â€”' }}</p>
                 </div>
                 <div>
                   <p class="text-xs text-zinc-400">Email</p>
-                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_email || booking.customer_email || '—' }}</p>
+                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_email || booking.customer_email || 'â€”' }}</p>
                 </div>
                 <div>
                   <p class="text-xs text-zinc-400">Phone</p>
-                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_phone || booking.customer_phone || '—' }}</p>
+                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_phone || booking.customer_phone || 'â€”' }}</p>
                 </div>
               </div>
 
@@ -404,7 +404,7 @@ onMounted(fetchBooking)
               <div v-else class="text-xs text-zinc-400 pt-4 mt-4 border-t border-zinc-100">No identity documents submitted.</div>
             </div>
 
-            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6 space-y-4 sticky top-24">
               <h2 class="text-sm font-semibold text-zinc-900">Payment</h2>
               <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 text-center">
                 <CreditCard class="h-8 w-8 text-zinc-300 mx-auto mb-2" />
@@ -443,11 +443,11 @@ onMounted(fetchBooking)
                   <div v-for="entry in (showAllHistory ? assignmentHistory : assignmentHistory.slice(0, 5))" :key="entry.id" class="text-xs p-2 rounded bg-zinc-50 border border-zinc-100">
                     <p class="text-zinc-700">
                       <span v-if="entry.previous_plate" class="text-zinc-400 line-through">{{ entry.previous_plate }}</span>
-                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">→</span>
+                      <span v-if="entry.previous_plate" class="text-zinc-400 mx-1">â†’</span>
                       <span class="font-mono font-medium text-zinc-900">{{ entry.new_plate }}</span>
                     </p>
                     <p class="text-zinc-400 mt-0.5">{{ entry.reason }}</p>
-                    <p class="text-zinc-400">{{ entry.changed_by_name }} · {{ formatDateTime(entry.created_at) }}</p>
+                    <p class="text-zinc-400">{{ entry.changed_by_name }} Â· {{ formatDateTime(entry.created_at) }}</p>
                   </div>
                   <button
                     v-if="assignmentHistory.length > 5"
@@ -474,7 +474,7 @@ onMounted(fetchBooking)
         <Teleport to="body">
           <div v-if="showCancelModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/50" @click="closeCancelModal" />
-            <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <div class="relative bg-surface rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
               <h3 class="text-lg font-semibold text-zinc-900">Cancel Booking Request</h3>
               <p class="text-sm text-zinc-500">Please provide a reason for cancelling your booking request.</p>
 
@@ -483,7 +483,7 @@ onMounted(fetchBooking)
                 <label class="text-xs font-medium text-zinc-700">Reason</label>
                 <select
                   v-model="cancelReasonType"
-                  class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
                   :disabled="cancelling"
                 >
                   <option v-for="reason in CANCEL_REASONS" :key="reason.value" :value="reason.value">{{ reason.label }}</option>
@@ -497,7 +497,7 @@ onMounted(fetchBooking)
                   v-model="cancelReasonCustom"
                   rows="2"
                   placeholder="Enter your reason..."
-                  class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  class="w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
                   :disabled="cancelling"
                 />
               </div>

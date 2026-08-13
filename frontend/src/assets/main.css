@@ -1,15 +1,87 @@
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ *  CAR RENTAL — CENTRALIZED THEME TOKENS
+ * ─────────────────────────────────────────────────────────────────────────
+ *  Single source of truth for every color in the system.
+ *
+ *  SEMANTIC TOKENS  (light values live in @theme; dark overrides in .dark)
+ *    surface          → card / panel backgrounds       (bg-surface)
+ *    ink              → primary action buttons, avatars (bg-ink)
+ *    ink-foreground   → text/icons sitting on ink       (text-ink-foreground)
+ *
+ *  TAILWIND PALETTE  (zinc, red, amber, …) is remapped in `.dark` only —
+ *  existing utilities like `text-zinc-900`, `border-zinc-200`, `bg-amber-50`
+ *  automatically flip for dark mode.  Light values remain Tailwind's defaults.
+ *
+ *  To tweak a theme, edit the values in `@theme` (light) and/or `.dark`.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+
 @theme {
   --font-sans: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+
+  /* Semantic tokens — light theme values */
+  --color-surface: #ffffff;          /* raised cards / panels          */
+  --color-ink: #18181b;              /* primary buttons, avatars       */
+  --color-ink-foreground: #ffffff;   /* text/icons on ink              */
+  --color-ink-hover: #27272a;
+}
+
+/*
+ * DARK THEME — applied when <html> carries the `.dark` class (see theme store).
+ */
+.dark {
+  color-scheme: dark;
+
+  /* Semantic tokens — dark theme values */
+  --color-surface: #1b1b1f;
+  --color-ink: #f4f4f6;              /* primary buttons become light   */
+  --color-ink-foreground: #18181b;   /* dark text on light ink button  */
+  --color-ink-hover: #e6e6ec;
+
+  /* Palette remap — high-contrast neutrals on a near-black canvas */
+  --color-zinc-50: #111113;
+  --color-zinc-100: #202024;
+  --color-zinc-200: #2c2c32;
+  --color-zinc-300: #3a3a42;
+  --color-zinc-400: #6e6e78;
+  --color-zinc-500: #9c9ca6;
+  --color-zinc-600: #b8b8c2;
+  --color-zinc-700: #d6d6de;
+  --color-zinc-800: #e6e6ec;
+  --color-zinc-900: #f4f4f6;
+
+  /* Status tints — translucent dark backgrounds with bright foreground text */
+  --color-red-50: #2a1215;    --color-red-100: #3a181c;    --color-red-200: #552127;
+  --color-red-800: #fca5a5;   --color-red-600: #f87171;    --color-red-700: #f87171;
+  --color-red-300: #7f1d1d;
+
+  --color-amber-50: #241a0a;  --color-amber-100: #33240e;  --color-amber-200: #4d3514;
+  --color-amber-600: #fbbf24; --color-amber-700: #fcd34d;  --color-amber-800: #fde68a;
+
+  --color-green-50: #0d1f14;  --color-green-100: #142a1b;  --color-green-800: #86efac;
+  --color-green-600: #4ade80; --color-green-700: #4ade80;
+
+  --color-blue-50: #0e1a2b;   --color-blue-100: #13243c;   --color-blue-200: #1b3556;
+  --color-blue-600: #60a5fa;  --color-blue-700: #93c5fd;   --color-blue-800: #93c5fd;
+
+  --color-emerald-50: #0a1f16; --color-emerald-100: #0f2c1e; --color-emerald-200: #164030;
+  --color-emerald-600: #34d399; --color-emerald-700: #6ee7b7; --color-emerald-800: #6ee7b7;
+
+  --color-purple-100: #2a1a3d; --color-purple-800: #d8b4fe;
+
+  --color-indigo-100: #1c2145; --color-indigo-800: #a5b4fc;
 }
 
 body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
   font-weight: 400;
   line-height: 1.6;
-  color: #18181b;
-  background-color: #fafafa;
+  color: var(--color-zinc-900);
+  background-color: var(--color-zinc-50);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 

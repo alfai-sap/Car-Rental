@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -276,8 +276,8 @@ onMounted(async () => {
     <main class="flex-1 max-w-6xl mx-auto px-4 pt-24 pb-16 w-full">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-8">
-        <div class="h-10 w-10 rounded-full bg-zinc-900 flex items-center justify-center">
-          <Shield class="h-5 w-5 text-white" />
+        <div class="h-10 w-10 rounded-full bg-ink flex items-center justify-center">
+          <Shield class="h-5 w-5 text-ink-foreground" />
         </div>
         <div>
           <h1 class="text-2xl font-semibold text-zinc-900">Admin Dashboard</h1>
@@ -342,7 +342,7 @@ onMounted(async () => {
               v-model="searchQuery"
               type="text"
               placeholder="Search bookings..."
-              class="h-9 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              class="h-9 w-full rounded-md border border-zinc-300 bg-surface pl-9 pr-3 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
             />
           </div>
 
@@ -350,7 +350,7 @@ onMounted(async () => {
           <div class="relative">
             <button
               @click="filterDropdownOpen = !filterDropdownOpen"
-              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
             >
               <ListFilter class="h-4 w-4 text-zinc-400" />
               <span>{{ STATUS_TABS.find(t => t.key === activeTab)?.label || 'All' }}</span>
@@ -359,7 +359,7 @@ onMounted(async () => {
             </button>
             <div
               v-if="filterDropdownOpen"
-              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              class="absolute right-0 mt-1 w-48 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
               @mouseleave="filterDropdownOpen = false"
             >
               <div class="p-1">
@@ -381,7 +381,7 @@ onMounted(async () => {
           <div class="relative">
             <button
               @click="sortDropdownOpen = !sortDropdownOpen"
-              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
+              class="flex items-center gap-2 h-9 px-3 rounded-md border border-zinc-300 bg-surface text-sm text-zinc-700 hover:bg-zinc-50"
             >
               <ArrowUpDown class="h-4 w-4 text-zinc-400" />
               <span>{{ SORT_OPTIONS.find(o => o.key === sortBy)?.label || 'Sort' }}</span>
@@ -389,7 +389,7 @@ onMounted(async () => {
             </button>
             <div
               v-if="sortDropdownOpen"
-              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-white shadow-lg z-30"
+              class="absolute right-0 mt-1 w-44 rounded-md border border-zinc-200 bg-surface shadow-lg z-30"
               @mouseleave="sortDropdownOpen = false"
             >
               <div class="p-1">
@@ -408,7 +408,7 @@ onMounted(async () => {
         </div>
 
         <!-- Bookings Table -->
-        <div v-if="paginatedBookings.length > 0" class="rounded-md border border-zinc-200 bg-white overflow-hidden">
+        <div v-if="paginatedBookings.length > 0" class="rounded-md border border-zinc-200 bg-surface overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead>
@@ -447,7 +447,7 @@ onMounted(async () => {
                       <p class="text-xs text-zinc-400">{{ booking.rental_days }} day{{ booking.rental_days > 1 ? 's' : '' }}</p>
                     </td>
                     <td class="px-4 py-3 font-medium text-zinc-900">
-                      ₱{{ Number(booking.estimated_total).toLocaleString('en-PH') }}
+                      â‚±{{ Number(booking.estimated_total).toLocaleString('en-PH') }}
                     </td>
                     <td class="px-4 py-3">
                       <span
@@ -477,7 +477,7 @@ onMounted(async () => {
                             v-model="rejectReason"
                             rows="2"
                             placeholder="Enter reason for rejection..."
-                            class="w-full rounded-md border border-red-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-400"
+                            class="w-full rounded-md border border-red-300 bg-surface px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-400"
                           />
                         </div>
                         <div class="flex items-center gap-1.5 pt-5">
@@ -516,7 +516,7 @@ onMounted(async () => {
                         </div>
                         <div>
                           <p class="text-xs text-zinc-400">Subtotal</p>
-                          <p class="text-sm text-zinc-900">₱{{ Number(booking.subtotal).toLocaleString('en-PH') }}</p>
+                          <p class="text-sm text-zinc-900">â‚±{{ Number(booking.subtotal).toLocaleString('en-PH') }}</p>
                         </div>
                         <div>
                           <p class="text-xs text-zinc-400">Created</p>
@@ -555,7 +555,7 @@ onMounted(async () => {
             :key="page"
             @click="goToPage(page)"
             class="h-8 w-8 flex items-center justify-center rounded text-xs font-medium transition-colors"
-            :class="page === currentPage ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-100'"
+            :class="page === currentPage ? 'bg-ink text-ink-foreground' : 'text-zinc-600 hover:bg-zinc-100'"
           >
             {{ page }}
           </button>

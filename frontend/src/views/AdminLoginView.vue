@@ -43,7 +43,7 @@ async function handleLogin() {
 
 <template>
   <div class="min-h-screen flex flex-col bg-zinc-50">
-    <header class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-zinc-200">
+    <header class="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-sm border-b border-zinc-200">
       <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <RouterLink to="/" class="text-lg font-semibold text-zinc-900 tracking-tight">
@@ -56,8 +56,8 @@ async function handleLogin() {
     <div class="flex-1 flex items-center justify-center px-4 pt-16">
       <div class="w-full max-w-sm">
         <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center h-12 w-12 rounded-full bg-zinc-900 mb-4">
-            <Shield class="h-6 w-6 text-white" />
+          <div class="inline-flex items-center justify-center h-12 w-12 rounded-full bg-ink mb-4">
+            <Shield class="h-6 w-6 text-ink-foreground" />
           </div>
           <h1 class="text-2xl font-semibold text-zinc-900 tracking-tight">
             Admin Login

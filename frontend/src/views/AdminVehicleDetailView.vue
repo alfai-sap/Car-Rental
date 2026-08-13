@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
@@ -56,7 +56,7 @@ const saveError = ref('')
 const saving = ref(false)
 const currentImage = ref(0)
 
-// ── Image gallery ──
+// â”€â”€ Image gallery â”€â”€
 function prevImage() {
   if (!vehicle.value) return
   currentImage.value = (currentImage.value - 1 + vehicle.value.images.length) % vehicle.value.images.length
@@ -66,14 +66,14 @@ function nextImage() {
   currentImage.value = (currentImage.value + 1) % vehicle.value.images.length
 }
 
-// ── Edit mode for vehicle info ──
+// â”€â”€ Edit mode for vehicle info â”€â”€
 const editingInfo = ref(false)
 const editForm = ref({
   make: '', model: '', year: 0, type: '', transmission: '', fuel: '',
   seats: 0, price_per_day: '', description: '', status: 'available',
 })
 
-// ── Unit management ──
+// â”€â”€ Unit management â”€â”€
 const units = ref<VehicleUnit[]>([])
 const unitsLoading = ref(false)
 const showUnitForm = ref(false)
@@ -83,7 +83,7 @@ const unitFormError = ref('')
 const unitFormLoading = ref(false)
 const deleteUnitId = ref<number | null>(null)
 
-// ── Delete vehicle ──
+// â”€â”€ Delete vehicle â”€â”€
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
 
@@ -126,7 +126,7 @@ onMounted(async () => {
   await fetchUnits()
 })
 
-// ── Edit vehicle info ──
+// â”€â”€ Edit vehicle info â”€â”€
 function startEditInfo() {
   if (!vehicle.value) return
   editForm.value = {
@@ -149,7 +149,7 @@ function cancelEditInfo() {
   saveError.value = ''
 }
 
-// ── Save vehicle info ──
+// â”€â”€ Save vehicle info â”€â”€
 async function saveVehicleInfo() {
   saving.value = true
   saveError.value = ''
@@ -208,7 +208,7 @@ async function deleteVehicle() {
   finally { deleting.value = false }
 }
 
-// ── Unit CRUD ──
+// â”€â”€ Unit CRUD â”€â”€
 function openAddUnit() {
   editingUnit.value = null
   unitForm.value = { plate_number: '', status: 'available', mileage: 0, notes: '' }
@@ -293,7 +293,7 @@ async function handleImageUpload(event: Event) {
 }
 
 function formatPrice(price: string): string {
-  return `₱${Number(price).toLocaleString('en-PH')}/day`
+  return `â‚±${Number(price).toLocaleString('en-PH')}/day`
 }
 
 function unitStatusBadge(status: string): string {
@@ -340,7 +340,7 @@ function unitStatusBadge(status: string): string {
           <!-- LEFT COLUMN: Vehicle Info (2/3 width) -->
           <div class="lg:col-span-2 space-y-6">
             <!-- Image Gallery -->
-            <div class="rounded-lg border border-zinc-200 bg-white overflow-hidden">
+            <div class="rounded-lg border border-zinc-200 bg-surface overflow-hidden">
               <template v-if="vehicle.images.length">
                 <div class="aspect-video bg-zinc-900 relative">
                   <img
@@ -384,7 +384,7 @@ function unitStatusBadge(status: string): string {
             </div>
 
             <!-- Vehicle Details -->
-            <div class="rounded-lg border border-zinc-200 bg-white p-6">
+            <div class="rounded-lg border border-zinc-200 bg-surface p-6">
               <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold text-zinc-900">Vehicle Details</h2>
                 <div class="flex gap-1">
@@ -438,28 +438,28 @@ function unitStatusBadge(status: string): string {
                 <div class="grid grid-cols-2 gap-3">
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Make</label>
-                    <input v-model="editForm.make" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                    <input v-model="editForm.make" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                   </div>
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Model</label>
-                    <input v-model="editForm.model" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                    <input v-model="editForm.model" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                   </div>
                 </div>
 
                 <div class="grid grid-cols-3 gap-3">
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Year</label>
-                    <input v-model.number="editForm.year" type="number" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                    <input v-model.number="editForm.year" type="number" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                   </div>
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Type</label>
-                    <select v-model="editForm.type" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+                    <select v-model="editForm.type" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
                       <option value="sedan">Sedan</option><option value="suv">SUV</option><option value="hatchback">Hatchback</option><option value="mpv">MPV</option><option value="van">Van</option><option value="pickup">Pickup</option><option value="truck">Truck</option><option value="coupe">Coupe</option>
                     </select>
                   </div>
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Status</label>
-                    <select v-model="editForm.status" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+                    <select v-model="editForm.status" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
                       <option value="available">Available</option>
                       <option value="unavailable">Unavailable</option>
                     </select>
@@ -469,33 +469,33 @@ function unitStatusBadge(status: string): string {
                 <div class="grid grid-cols-2 gap-3">
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Seats</label>
-                    <input v-model.number="editForm.seats" type="number" min="1" max="20" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                    <input v-model.number="editForm.seats" type="number" min="1" max="20" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                   </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Transmission</label>
-                    <select v-model="editForm.transmission" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+                    <select v-model="editForm.transmission" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
                       <option value="automatic">Automatic</option><option value="manual">Manual</option>
                     </select>
                   </div>
                   <div class="space-y-1">
                     <label class="text-xs font-medium text-zinc-700">Fuel</label>
-                    <select v-model="editForm.fuel" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+                    <select v-model="editForm.fuel" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
                       <option value="gasoline">Gasoline</option><option value="diesel">Diesel</option><option value="electric">Electric</option><option value="hybrid">Hybrid</option>
                     </select>
                   </div>
                 </div>
 
                 <div class="space-y-1">
-                  <label class="text-xs font-medium text-zinc-700">Price Per Day (₱)</label>
-                  <input v-model="editForm.price_per_day" type="number" min="0" step="0.01" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                  <label class="text-xs font-medium text-zinc-700">Price Per Day (â‚±)</label>
+                  <input v-model="editForm.price_per_day" type="number" min="0" step="0.01" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                 </div>
 
                 <div class="space-y-1">
                   <label class="text-xs font-medium text-zinc-700">Description</label>
-                  <textarea v-model="editForm.description" rows="3" class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+                  <textarea v-model="editForm.description" rows="3" class="w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
                 </div>
 
                 <!-- Image management during edit -->
@@ -532,7 +532,7 @@ function unitStatusBadge(status: string): string {
             </div>
 
             <!-- Unit Management -->
-            <div class="rounded-lg border border-zinc-200 bg-white p-6">
+            <div class="rounded-lg border border-zinc-200 bg-surface p-6">
               <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold text-zinc-900">Vehicle Units</h2>
                 <Button variant="ghost" size="sm" @click="openAddUnit">
@@ -568,8 +568,8 @@ function unitStatusBadge(status: string): string {
                         {{ unit.status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) }}
                       </span>
                     </td>
-                    <td class="py-2.5 text-zinc-600">{{ unit.mileage?.toLocaleString() || '—' }} km</td>
-                    <td class="py-2.5 text-zinc-500 text-xs max-w-[120px] truncate">{{ unit.notes || '—' }}</td>
+                    <td class="py-2.5 text-zinc-600">{{ unit.mileage?.toLocaleString() || 'â€”' }} km</td>
+                    <td class="py-2.5 text-zinc-500 text-xs max-w-[120px] truncate">{{ unit.notes || 'â€”' }}</td>
                     <td class="py-2.5 text-right">
                       <Button variant="ghost" size="sm" @click="openEditUnit(unit)">
                         <Pencil class="h-3.5 w-3.5" />
@@ -586,7 +586,7 @@ function unitStatusBadge(status: string): string {
 
           <!-- RIGHT COLUMN: Summary Card (1/3 width) -->
           <div class="space-y-4">
-            <div class="rounded-lg border border-zinc-200 bg-white p-5 sticky top-24">
+            <div class="rounded-lg border border-zinc-200 bg-surface p-5 sticky top-24">
               <h3 class="text-sm font-semibold text-zinc-900 mb-3">Summary</h3>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
@@ -621,7 +621,7 @@ function unitStatusBadge(status: string): string {
     <Teleport to="body">
       <div v-if="showDeleteConfirm" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="showDeleteConfirm = false" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Delete Vehicle</h3>
           <p class="text-sm text-zinc-500">Are you sure? This will also delete all associated units and images.</p>
           <div class="flex gap-2 pt-2">
@@ -638,7 +638,7 @@ function unitStatusBadge(status: string): string {
     <Teleport to="body">
       <div v-if="deleteUnitId !== null" class="fixed inset-0 z-[210] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/50" @click="deleteUnitId = null" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Delete Unit</h3>
           <p class="text-sm text-zinc-500">Are you sure you want to remove this unit?</p>
           <div class="flex gap-2 pt-2">
@@ -653,7 +653,7 @@ function unitStatusBadge(status: string): string {
     <Teleport to="body">
       <div v-if="showUnitForm" class="fixed inset-0 z-[210] flex items-start justify-center pt-20 p-4">
         <div class="absolute inset-0 bg-black/60" @click="closeUnitForm" />
-        <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
+        <div class="relative bg-surface rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-zinc-900">
               {{ editingUnit ? 'Edit Unit' : 'Add Unit' }}
@@ -666,11 +666,11 @@ function unitStatusBadge(status: string): string {
           <div class="space-y-3">
             <div class="space-y-1">
               <label class="text-xs font-medium text-zinc-700">Plate Number</label>
-              <input v-model="unitForm.plate_number" placeholder="ABC-1234" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+              <input v-model="unitForm.plate_number" placeholder="ABC-1234" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
             </div>
             <div class="space-y-1">
               <label class="text-xs font-medium text-zinc-700">Status</label>
-              <select v-model="unitForm.status" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
+              <select v-model="unitForm.status" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400">
                 <option value="available">Available</option>
                 <option value="reserved">Reserved</option>
                 <option value="booked">Booked</option>
@@ -681,11 +681,11 @@ function unitStatusBadge(status: string): string {
             </div>
             <div class="space-y-1">
               <label class="text-xs font-medium text-zinc-700">Mileage (km)</label>
-              <input v-model="unitForm.mileage" type="number" min="0" class="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+              <input v-model="unitForm.mileage" type="number" min="0" class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400" />
             </div>
             <div class="space-y-1">
               <label class="text-xs font-medium text-zinc-700">Notes</label>
-              <textarea v-model="unitForm.notes" rows="2" placeholder="Optional notes..." class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400" />
+              <textarea v-model="unitForm.notes" rows="2" placeholder="Optional notes..." class="w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400" />
             </div>
           </div>
 

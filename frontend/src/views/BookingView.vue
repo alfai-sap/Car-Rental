@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -32,14 +32,14 @@ const vehicle = ref<Vehicle | null>(null)
 const loading = ref(true)
 const error = ref('')
 
-// ── Driver info ──
+// â”€â”€ Driver info â”€â”€
 const identityDocs = ref<IdentityDoc[]>([])
 const checkingDocs = ref(true)
 const hasDriverLicense = computed(() =>
   identityDocs.value.some(doc => doc.document_type === 'drivers_license')
 )
 
-// ── Calendar state ──
+// â”€â”€ Calendar state â”€â”€
 const calendarMonth = ref(new Date())
 const startStr = ref('')  // "YYYY-MM-DD"
 const endStr = ref('')    // "YYYY-MM-DD"
@@ -92,7 +92,7 @@ const submitting = ref(false)
 const submitError = ref('')
 const submitSuccess = ref(false)
 
-// ── Calendar helpers ──
+// â”€â”€ Calendar helpers â”€â”€
 function toDateString(d: Date): string {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 }
@@ -153,7 +153,7 @@ function nextMonth() {
 function onDayClick(ds: string, isPast: boolean, isCurrentMonth: boolean) {
   if (isPast || !isCurrentMonth) return
 
-  // No start yet, or both already set → start fresh
+  // No start yet, or both already set â†’ start fresh
   if (!startStr.value || (startStr.value && endStr.value)) {
     startStr.value = ds
     endStr.value = ''
@@ -161,9 +161,9 @@ function onDayClick(ds: string, isPast: boolean, isCurrentMonth: boolean) {
     return
   }
 
-  // Have start, no end → this click finishes the range
+  // Have start, no end â†’ this click finishes the range
   if (ds < startStr.value) {
-    // Clicked before start → flip
+    // Clicked before start â†’ flip
     startStr.value = ds
     availability.value = null
   } else {
@@ -193,7 +193,7 @@ const canSubmit = computed(() => {
   )
 })
 
-// Local rental-day calculation (inclusive: Aug 1–2 = 2 days, Aug 1–1 = 1 day)
+// Local rental-day calculation (inclusive: Aug 1â€“2 = 2 days, Aug 1â€“1 = 1 day)
 const rentalDays = computed(() => {
   if (!startStr.value || !endStr.value) return null
   const s = parseDate(startStr.value)
@@ -302,7 +302,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
         <h1 class="text-2xl font-semibold text-zinc-900 mb-8">Book {{ vehicle.make }} {{ vehicle.model }}</h1>
 
         <!-- Not Logged In -->
-        <div v-if="!auth.isAuthenticated" class="rounded-md border border-zinc-200 bg-white p-6 text-center mb-8">
+        <div v-if="!auth.isAuthenticated" class="rounded-md border border-zinc-200 bg-surface p-6 text-center mb-8">
           <p class="text-sm text-zinc-600 mb-4">You need to be logged in to book a vehicle.</p>
           <RouterLink to="/login">
             <Button>Sign In</Button>
@@ -333,7 +333,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
           <!-- Form Column -->
           <div class="lg:col-span-3 space-y-6">
             <!-- Date Range Calendar -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <div class="flex items-center justify-between mb-4">
                 <h2 class="text-sm font-semibold text-zinc-900">Select Rental Dates</h2>
                 <button
@@ -350,11 +350,11 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                 <span class="text-zinc-900 font-medium">
                   {{ startDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
                 </span>
-                <span v-if="endStr" class="text-zinc-400">→</span>
+                <span v-if="endStr" class="text-zinc-400">â†’</span>
                 <span v-if="endStr" class="text-zinc-900 font-medium">
                   {{ endDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
                 </span>
-                <span v-if="!endStr" class="text-xs text-zinc-400 italic">— select end date</span>
+                <span v-if="!endStr" class="text-xs text-zinc-400 italic">â€” select end date</span>
               </div>
 
               <!-- Calendar Header -->
@@ -391,13 +391,13 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                       !day.isPast && day.isCurrentMonth && !day.isStart && !day.isEnd && !day.inRange ? 'hover:bg-zinc-100 cursor-pointer text-zinc-700' : '',
                       day.inRange ? 'border-t border-b border-zinc-300 bg-zinc-50 text-zinc-700' : '',
                       day.isStart && day.isEnd
-                        ? 'rounded-md bg-zinc-900 text-white font-medium'
+                        ? 'rounded-md bg-ink text-ink-foreground font-medium'
                         : '',
                       day.isStart && !day.isEnd
-                        ? 'rounded-l-md bg-zinc-900 text-white font-medium'
+                        ? 'rounded-l-md bg-ink text-ink-foreground font-medium'
                         : '',
                       day.isEnd && !day.isStart
-                        ? 'rounded-r-md bg-zinc-900 text-white font-medium'
+                        ? 'rounded-r-md bg-ink text-ink-foreground font-medium'
                         : '',
                     ]"
                   >
@@ -408,7 +408,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
             </div>
 
             <!-- Pickup & Return Details -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Schedule</h2>
               <div class="grid grid-cols-2 gap-4">
                 <!-- Pickup -->
@@ -418,14 +418,14 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                     <div>
                       <p class="text-xs text-zinc-400">Date</p>
                       <p class="text-sm font-medium text-zinc-900">
-                        {{ startDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '—' }}
+                        {{ startDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || 'â€”' }}
                       </p>
                     </div>
                     <div class="space-y-1">
                       <Label>Time</Label>
                       <select
                         v-model="pickupTime"
-                        class="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                        class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
                       >
                         <option value="06:00">06:00 AM</option>
                         <option value="07:00">07:00 AM</option>
@@ -451,14 +451,14 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                     <div>
                       <p class="text-xs text-zinc-400">Date</p>
                       <p class="text-sm font-medium text-zinc-900">
-                        {{ endDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '—' }}
+                        {{ endDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || 'â€”' }}
                       </p>
                     </div>
                     <div class="space-y-1">
                       <Label>Time</Label>
                       <select
                         v-model="returnTime"
-                        class="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                        class="h-9 w-full rounded-md border border-zinc-300 bg-surface px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
                       >
                         <option value="06:00">06:00 AM</option>
                         <option value="07:00">07:00 AM</option>
@@ -480,14 +480,14 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
             </div>
 
             <!-- Special Requests -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Additional Information</h2>
               <div class="space-y-2">
                 <Label>Special Requests (Optional)</Label>
                 <textarea
                   v-model="specialRequest"
                   rows="3"
-                  class="flex w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  class="flex w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
                   placeholder="Any special requirements..."
                 />
               </div>
@@ -530,7 +530,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
           <!-- Sidebar Summary -->
           <div class="lg:col-span-2">
-            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
+            <div class="rounded-md border border-zinc-200 bg-surface p-6 space-y-4 sticky top-24">
               <h2 class="text-sm font-semibold text-zinc-900">Booking Summary</h2>
 
               <div>
@@ -542,7 +542,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
                 <p class="text-xs text-zinc-500">Rental Period</p>
                 <p class="text-sm font-medium text-zinc-900">
                   {{ startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
-                  —
+                  â€”
                   {{ endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
                 </p>
               </div>
@@ -551,7 +551,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
               <div>
                 <p class="text-xs text-zinc-500">Daily Rate</p>
-                <p class="text-sm font-medium text-zinc-900">₱{{ pricePerDay.toLocaleString('en-PH') }}</p>
+                <p class="text-sm font-medium text-zinc-900">â‚±{{ pricePerDay.toLocaleString('en-PH') }}</p>
               </div>
 
               <div v-if="rentalDays !== null">
@@ -563,7 +563,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
               <div v-if="estimatedTotal !== null">
                 <p class="text-xs text-zinc-500">Estimated Total</p>
-                <p class="text-lg font-bold text-zinc-900">₱{{ estimatedTotal.toLocaleString('en-PH') }}</p>
+                <p class="text-lg font-bold text-zinc-900">â‚±{{ estimatedTotal.toLocaleString('en-PH') }}</p>
               </div>
             </div>
           </div>
