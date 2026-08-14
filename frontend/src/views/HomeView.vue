@@ -29,7 +29,7 @@ import heroimage from '@/assets/car2.webp'
         </p>
         <div class="mt-10 flex items-center justify-center gap-4">
           <RouterLink to="/vehicles">
-            <Button size="lg">Browse Vehicles</Button>
+            <Button class="bg-white! text-black! hover:bg-zinc-800! hover:text-white!" size="lg">Browse Vehicles</Button>
           </RouterLink>
         </div>
       </div>

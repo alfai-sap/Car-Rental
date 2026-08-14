@@ -227,7 +227,7 @@ PASSWORD_RESET_TIMEOUT = 900
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.accounts.authentication.JWTAuthenticationWithTokenVersion',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
@@ -240,7 +240,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '1000/minute',
+        'anon': '100/minute',
         'user': '2000/minute',
         'login': '5/minute',
         'password_reset': '3/minute',

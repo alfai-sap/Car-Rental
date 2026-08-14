@@ -1,5 +1,6 @@
 from django.contrib import admin
 from apps.core import services as notify
+from apps.core.services import create_audit_log
 from .models import Booking, AssignmentHistory
 
 
@@ -16,6 +17,10 @@ class BookingAdmin(admin.ModelAdmin):
     readonly_fields = [
         'booking_number', 'rental_days', 'subtotal', 'estimated_total',
         'created_at', 'updated_at', 'handover_time', 'return_time_actual',
+        # Status transitions must go through the API state machine (which
+        # locks rows, maintains unit statuses, and writes audit logs).
+        # Directly editing these in the admin would bypass all of that.
+        'status', 'vehicle_unit', 'identity_snapshot',
     ]
     fieldsets = (
         ('Booking Info', {
@@ -43,9 +48,16 @@ class BookingAdmin(admin.ModelAdmin):
     def approve_selected(self, request, queryset):
         count = 0
         for booking in queryset.filter(status='pending_approval'):
+            before = {'status': booking.status}
             booking.status = 'awaiting_payment'
             booking.save()
             notify.notify_booking_approved(booking)
+            create_audit_log(
+                actor=request.user, action='booking_approved', booking=booking,
+                summary=f'Approved booking {booking.booking_number} (bulk admin action)',
+                before_state=before, after_state={'status': booking.status},
+                request=request,
+            )
             count += 1
         self.message_user(request, f'{count} booking(s) approved and notified. Now awaiting payment.')
 
@@ -53,10 +65,17 @@ class BookingAdmin(admin.ModelAdmin):
     def reject_selected(self, request, queryset):
         count = 0
         for booking in queryset.filter(status='pending_approval'):
+            before = {'status': booking.status}
             booking.status = 'rejected'
             booking.rejection_reason = 'Rejected by admin.'
             booking.save()
             notify.notify_booking_rejected(booking)
+            create_audit_log(
+                actor=request.user, action='booking_rejected', booking=booking,
+                summary=f'Rejected booking {booking.booking_number} (bulk admin action)',
+                before_state=before, after_state={'status': booking.status},
+                request=request,
+            )
             count += 1
         self.message_user(request, f'{count} booking(s) rejected and notified.')
 

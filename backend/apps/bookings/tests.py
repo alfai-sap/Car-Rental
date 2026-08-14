@@ -301,6 +301,29 @@ class BookingAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'cancelled')
 
+    # ── Delete ──
+
+    def test_booking_cannot_be_deleted_by_customer(self):
+        """Bookings are financial records and must not be hard-deleted."""
+        self._login_as(self.customer)
+        create_resp = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        booking_id = create_resp.data['id']
+
+        response = self.client.delete(f'/api/bookings/{booking_id}/')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Booking.objects.filter(pk=booking_id).exists())
+
+    def test_booking_cannot_be_deleted_by_admin(self):
+        """Even staff must not be able to hard-delete a booking."""
+        self._login_as(self.customer)
+        create_resp = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        booking_id = create_resp.data['id']
+
+        self._login_as(self.admin)
+        response = self.client.delete(f'/api/bookings/{booking_id}/')
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Booking.objects.filter(pk=booking_id).exists())
+
     # ── Admin Approve/Reject ──
 
     def test_admin_approve_booking(self):

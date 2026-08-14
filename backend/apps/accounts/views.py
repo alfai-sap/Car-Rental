@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.utils import timezone
+from django.core.signing import SignatureExpired, BadSignature
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.template.loader import render_to_string
@@ -13,6 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.core.exception_handler import format_throttle_message
 
@@ -51,6 +53,10 @@ def has_active_bookings(user):
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
+    # Bind every issued token to the account's current session version so
+    # revoking sessions (logout, password change, email verification)
+    # invalidates them immediately via the custom authentication class.
+    refresh['token_version'] = user.token_version
     return {
         'refresh': str(refresh),
         'access': str(refresh.access_token),
@@ -182,7 +188,10 @@ class GoogleAuthView(views.APIView):
             )
 
         email = (idinfo.get('email') or '').strip().lower()
-        if not email:
+        # The email claim alone is not sufficient: Google can attach a
+        # Google-account email that has not actually been verified.  Reject
+        # tokens where Google did not confirm ownership of the address.
+        if not email or idinfo.get('email_verified') is not True:
             return Response(
                 {'detail': 'Google token did not contain a verified email.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -212,6 +221,13 @@ class GoogleAuthView(views.APIView):
                     'code': 'account_exists',
                 },
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        # A deactivated account must not be re-enabled via Google Sign-In.
+        if not user.is_active:
+            return Response(
+                {'detail': 'This account has been disabled. Please contact support.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Google accounts are verified by virtue of Google authentication.
@@ -259,7 +275,18 @@ class LoginView(views.APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
-        if user and user.check_password(password):
+        if user and user.is_active and user.check_password(password):
+            # ── Require email verification before sign-in ──
+            # Unverified accounts are rejected with a distinct, honest
+            # message here (not an anti-enumeration concern: the email was
+            # proven to exist via registration, and the user needs guidance
+            # to complete verification).
+            if not user.is_verified:
+                return Response(
+                    {'detail': 'Please verify your email address before signing in.', 'code': 'email_not_verified'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             # Successful login — clear any stale lockout state
             user.clear_failed_attempts()
             tokens = get_tokens_for_user(user)
@@ -270,16 +297,18 @@ class LoginView(views.APIView):
             _set_refresh_cookie(response, tokens['refresh'])
             return response
 
-        # Failed login — record the attempt if the account exists.
-        # We do NOT record attempts for nonexistent emails to prevent
-        # attackers from locking arbitrary accounts via enumeration.
+        # Failed login — record the attempt if the account exists and is
+        # active.  We do NOT record attempts for nonexistent emails (to
+        # prevent attackers from locking arbitrary accounts via
+        # enumeration) nor for deactivated accounts (which are treated
+        # exactly like unknown emails).
         #
         # NOTE: unverified accounts are intentionally allowed to reach this
         # point with the same generic response as any other bad credential.
         # The frontend always surfaces the verification hint banner, and the
         # dedicated resend-verification endpoint is anti-enumerating, so no
         # per-account signal is leaked here.
-        if user:
+        if user and user.is_active:
             user.record_failed_login()
             logger.info(
                 'Failed login for account %s (attempt %s/%s)',
@@ -315,11 +344,11 @@ class VerifyEmailView(views.APIView):
         user.verified_at = timezone.now()
         user.save()
 
-        # Invalidate all existing sessions — user must sign in fresh after verification
-        from rest_framework_simplejwt.token_blacklist.models import (
-            OutstandingToken,
-        )
-        OutstandingToken.objects.filter(user=user).delete()
+        # Invalidate all existing sessions — a newly verified account must
+        # sign in fresh.  This also covers the case where another device was
+        # left signed in before verification completed.
+        user.revoke_all_sessions()
+        user.save(update_fields=['token_version'])
 
         return Response({'detail': 'Email verified successfully. You can now sign in.'})
 
@@ -431,9 +460,12 @@ class PasswordChangeView(views.APIView):
         user.set_password(new_password)
         user.save()
 
-        # Invalidate all existing sessions
-        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
-        OutstandingToken.objects.filter(user=user).delete()
+        # Invalidate every session on every device, not just this one.
+        # (SimpleJWT's CHECK_REVOKE_TOKEN already revokes tokens via the
+        # password hash; bumping token_version additionally hard-revokes them
+        # even before the hash comparison and covers any edge cases.)
+        user.revoke_all_sessions()
+        user.save(update_fields=['token_version'])
 
         return Response({'detail': 'Password changed. Please sign in again.'})
 
@@ -568,13 +600,9 @@ class PasswordResetConfirmView(views.APIView):
         user.set_password(data['password'])
         user.save()
 
-        # Invalidate all existing sessions for this user by blacklisting
-        # every outstanding refresh token. This ensures that if someone
-        # else had access to a session, they are kicked out.
-        from rest_framework_simplejwt.token_blacklist.models import (
-            OutstandingToken,
-        )
-        OutstandingToken.objects.filter(user=user).delete()
+        # Invalidate every session on every device.
+        user.revoke_all_sessions()
+        user.save(update_fields=['token_version'])
 
         return Response({'detail': 'Password reset successful. Please sign in again.'})
 
@@ -590,6 +618,15 @@ class LogoutView(views.APIView):
                 token.blacklist()
         except Exception:
             pass  # token may already be invalid — that's fine
+
+        # Revoke every other session for this account.  Signing out of one
+        # device signs the account out everywhere (the user explicitly asked
+        # for all same-account sessions to be terminated on sign-out).
+        try:
+            request.user.revoke_all_sessions()
+            request.user.save(update_fields=['token_version'])
+        except Exception:
+            pass  # user may not have been resolved — nothing to revoke
 
         response = Response({'detail': 'Logged out successfully.'})
         response.delete_cookie('refresh_token', path='/api/auth/')
@@ -628,11 +665,16 @@ class CookieTokenRefreshView(views.APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # Blacklist the old token and rotate
+        # Blacklist the old token and rotate.  A replayed token raises
+        # TokenError ("already blacklisted"); treat that as invalid rather
+        # than minting a fresh token pair for a stolen refresh token.
         try:
             token.blacklist()
-        except Exception:
-            pass
+        except TokenError:
+            return Response(
+                {'detail': 'Refresh token is invalid or expired.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         # Issue new tokens
         user = User.objects.get(pk=token['user_id'])
@@ -740,11 +782,13 @@ class IdentityDocumentImageView(views.APIView):
             raise Http404
 
         try:
-            token_doc_pk, token_user_pk = signed_value.split('.', 1)
+            token_doc_pk, token_user_pk, token_side = signed_value.split('.', 2)
         except ValueError:
             raise Http404
 
         if token_doc_pk != str(pk):
+            raise Http404
+        if token_side != side:
             raise Http404
 
         # Token cryptographically proves user_id — no Authorization header needed.

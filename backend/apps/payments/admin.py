@@ -16,4 +16,4 @@ class PaymentAdmin(admin.ModelAdmin):
 	list_display = ['payment_number', 'booking', 'amount', 'currency', 'provider', 'payment_status', 'paid_at', 'created_at']
 	search_fields = ['payment_number', 'provider_reference', 'booking__booking_number', 'booking__customer__email']
 	list_filter = ['provider', 'payment_status', 'created_at', 'paid_at']
-	readonly_fields = ['payment_number', 'created_at', 'updated_at', 'paid_at']
+	readonly_fields = ['payment_number', 'created_at', 'updated_at', 'paid_at', 'raw_payload', 'webhook_event_id']

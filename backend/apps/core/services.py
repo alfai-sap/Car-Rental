@@ -308,6 +308,35 @@ def notify_payment_successful(booking):
     )
 
 
+def notify_payment_received_inactive(booking):
+    """Payment was received but the booking is no longer active.
+
+    Fires when a customer completes payment after their booking was
+    cancelled/rejected.  The money is recorded but the booking is never
+    resurrected — the customer is told to contact support and staff are
+    alerted to review/refund.
+    """
+    msg = (
+        f"Your payment for {_vehicle_name(booking)} was received, but your "
+        f"booking is no longer active. Please contact support for a refund."
+    )
+    create_notification(
+        user=booking.customer, notification_type='payment_failed',
+        title='Payment Received — Booking Not Active', message=msg,
+        booking=booking, link=_booking_link(booking),
+    )
+    create_admin_notification(
+        notification_type='payment_failed',
+        title=f'Payment Received for Inactive Booking: {booking.booking_number}',
+        message=(
+            f"Payment received for {booking.customer.first_name} {booking.customer.last_name}'s "
+            f"booking of {_vehicle_name(booking)}, but the booking status is "
+            f"'{booking.get_status_display()}'. Review and refund if necessary."
+        ),
+        booking=booking, link=_admin_link(booking),
+    )
+
+
 def notify_payment_failed(booking):
     msg = f"Payment for your {_vehicle_name(booking)} booking has failed. Please try again or contact support."
     create_notification(
@@ -335,37 +364,6 @@ def notify_payment_expired(booking):
             f"booking of {_vehicle_name(booking)} has expired."
         ),
         booking=booking, link=_admin_link(booking),
-    )
-
-
-def notify_repayment_requested(booking):
-    msg = (
-        f"{booking.customer.first_name} {booking.customer.last_name} has requested "
-        f"a new payment attempt for booking {booking.booking_number}."
-    )
-    create_admin_notification(
-        notification_type='payment_required',
-        title=f'Repayment Requested: {booking.booking_number}',
-        message=msg,
-        booking=booking, link=_admin_link(booking),
-    )
-
-
-def notify_repayment_approved(booking):
-    msg = f"Your request for a new payment attempt for {_vehicle_name(booking)} has been approved. Please complete payment."
-    create_notification(
-        user=booking.customer, notification_type='payment_required',
-        title='New Payment Approved', message=msg,
-        booking=booking, link=_booking_link(booking),
-    )
-
-
-def notify_repayment_rejected(booking):
-    msg = f"Your request for a new payment attempt for {_vehicle_name(booking)} was rejected and your booking has been cancelled."
-    create_notification(
-        user=booking.customer, notification_type='booking_rejected',
-        title='Repayment Request Rejected', message=msg,
-        booking=booking, link=_booking_link(booking),
     )
 
 

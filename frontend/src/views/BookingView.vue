@@ -39,6 +39,9 @@ const hasDriverLicense = computed(() =>
   identityDocs.value.some(doc => doc.document_type === 'drivers_license')
 )
 
+// Basic info (name + phone) is required before booking.
+const profileComplete = computed(() => !!(auth.user?.profile_complete))
+
 // ── Calendar state ──
 const calendarMonth = ref(new Date())
 const startStr = ref('')  // "YYYY-MM-DD"
@@ -187,6 +190,7 @@ const canSubmit = computed(() => {
   return (
     auth.isAuthenticated &&
     auth.user?.is_verified &&
+    profileComplete.value &&
     hasDriverLicense.value &&
     startStr.value &&
     endStr.value &&
@@ -314,7 +318,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
         <!-- Not Logged In -->
         <div v-if="!auth.isAuthenticated" class="rounded-md border border-zinc-200 bg-white p-6 text-center mb-8">
           <p class="text-sm text-zinc-600 mb-4">You need to be logged in to book a vehicle.</p>
-          <RouterLink to="/login">
+          <RouterLink :to="{ path: '/login', query: { redirect: $route.fullPath } }">
             <Button>Sign In</Button>
           </RouterLink>
         </div>
@@ -327,11 +331,22 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
           </RouterLink>
         </div>
 
+        <!-- Incomplete Basic Info -->
+        <div v-else-if="!profileComplete" class="rounded-md border border-amber-200 bg-amber-50 p-6 text-center mb-8">
+          <AlertTriangle class="h-5 w-5 text-amber-600 mx-auto mb-2" />
+          <p class="text-sm text-amber-800 mb-4">
+            Please complete your name and phone number before booking.
+          </p>
+          <RouterLink to="/profile" class="text-sm text-amber-900 font-medium hover:underline">
+            Go to Profile
+          </RouterLink>
+        </div>
+
         <!-- No Driver License -->
         <div v-else-if="!checkingDocs && !hasDriverLicense" class="rounded-md border border-amber-200 bg-amber-50 p-6 text-center mb-8">
           <AlertTriangle class="h-5 w-5 text-amber-600 mx-auto mb-2" />
           <p class="text-sm text-amber-800 mb-4">
-            You need to upload your driver's license before booking a vehicle.
+            You need to upload a valid ID such as Driver's license before booking a vehicle.
           </p>
           <RouterLink to="/profile" class="text-sm text-amber-900 font-medium hover:underline">
             Go to Profile

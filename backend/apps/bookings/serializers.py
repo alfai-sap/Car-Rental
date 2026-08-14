@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking, AssignmentHistory
 from apps.accounts.serializers import _identity_image_token, _identity_snapshot_image_token
-from apps.vehicles.models import VehicleUnit
+from apps.vehicles.models import VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
 # Statuses that occupy a VehicleUnit
 UNIT_OCCUPYING_STATUSES = ['approved', 'awaiting_payment', 'confirmed', 'waiting_for_pickup', 'active']
@@ -37,14 +37,14 @@ class BookingSerializer(serializers.ModelSerializer):
             'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
             'handover_time', 'return_time_actual', 'return_unit_status',
-            'repayment_requested', 'created_at', 'updated_at',
+            'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'booking_number', 'customer', 'vehicle_unit',
             'rental_days', 'subtotal', 'discount_percent', 'discount_amount',
             'estimated_total', 'status',
             'rejection_reason', 'cancellation_reason', 'created_at',
-            'updated_at', 'handover_time', 'repayment_requested',
+            'updated_at', 'handover_time',
         ]
 
     def get_vehicle_unit_plate(self, obj):
@@ -67,13 +67,14 @@ class BookingSerializer(serializers.ModelSerializer):
         docs = obj.customer.identity_documents.all()
         result = []
         for doc in docs:
-            token = _identity_image_token(doc.id, doc.user_id)
+            front_token = _identity_image_token(doc.id, doc.user_id, 'front')
+            back_token = _identity_image_token(doc.id, doc.user_id, 'back')
             item = {
                 'id': doc.id,
                 'document_type': doc.document_type,
                 'document_number': doc.document_number,
-                'front_image': f'/api/identity-documents/{doc.id}/image/front/?token={token}',
-                'back_image': f'/api/identity-documents/{doc.id}/image/back/?token={token}' if doc.back_image else None,
+                'front_image': f'/api/identity-documents/{doc.id}/image/front/?token={front_token}',
+                'back_image': f'/api/identity-documents/{doc.id}/image/back/?token={back_token}' if doc.back_image else None,
             }
             result.append(item)
         return result
@@ -189,7 +190,7 @@ class BookingSerializer(serializers.ModelSerializer):
             ).values_list('vehicle_unit_id', flat=True)
 
             unavailable_ids = VehicleUnit.objects.filter(
-                vehicle=vehicle, status__in=['maintenance', 'inactive'],
+                vehicle=vehicle, status__in=UNIT_UNAVAILABLE_STATUSES,
             ).values_list('id', flat=True)
 
             if unavailable_ids:

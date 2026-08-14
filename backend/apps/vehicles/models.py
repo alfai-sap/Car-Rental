@@ -134,3 +134,9 @@ class VehicleUnit(models.Model):
 
     def __str__(self):
         return f"{self.plate_number} — {self.vehicle} ({self.get_status_display()})"
+
+
+# Unit statuses that render a unit unavailable for booking.  Used by
+# availability checks so that manually reserved/booked units (which may
+# not have an overlapping Booking row) are never counted as free.
+UNIT_UNAVAILABLE_STATUSES = ['reserved', 'booked', 'active_rental', 'maintenance', 'inactive']

@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import FileExtensionValidator, RegexValidator
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.core.validators import validate_image_size, validate_image_content
@@ -24,20 +24,36 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email).lower()
 
         username = extra_fields.pop('username', None)
-        if not username:
-            username = email.split('@')[0]
-        # Avoid UNIQUE constraint collisions when two users share the same
-        # email local-part (e.g. john@gmail.com and john@yahoo.com).
-        base_username = username
-        suffix = 1
-        while self.filter(username=username).exists():
-            username = f'{base_username}{suffix}'
-            suffix += 1
+        if username:
+            # Explicit username — the caller is responsible for uniqueness.
+            user = self.model(email=email, username=username, **extra_fields)
+            user.set_password(password)
+            user.save(using=self._db)
+            return user
 
-        user = self.model(email=email, username=username, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
+        # Auto-generate a username from the email local-part.  Two concurrent
+        # registrations sharing the same local-part (e.g. john@gmail.com and
+        # john@yahoo.com) can both pass the existence check before either row
+        # is committed, racing on the unique constraint.  Retry with an
+        # incremented suffix on IntegrityError instead of surfacing a 500.
+        base_username = email.split('@')[0]
+        suffix = 0
+        while True:
+            candidate = base_username if suffix == 0 else f'{base_username}{suffix}'
+            user = self.model(email=email, username=candidate, **extra_fields)
+            user.set_password(password)
+            try:
+                # Savepoint isolation: a failed INSERT must not poison an
+                # enclosing transaction, so the retry below always succeeds.
+                with transaction.atomic(using=self._db):
+                    user.save(using=self._db)
+                return user
+            except IntegrityError:
+                # If the email itself is already registered, a new username
+                # can never resolve the conflict — re-raise the real error.
+                if self.filter(email=email).exists():
+                    raise
+                suffix += 1
 
     def create_user(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', False)
@@ -81,6 +97,17 @@ class User(AbstractUser):
         choices=AUTH_METHOD_CHOICES,
         default=AUTH_METHOD_EMAIL,
         help_text='How this account authenticates (email/password or Google).',
+    )
+
+    # ── Session revocation ──
+    # Bumped whenever every outstanding session for this account must be
+    # invalidated immediately (password change/reset, email verification,
+    # sign-out).  Access tokens carry this value as the `token_version`
+    # claim; the custom JWT authentication rejects tokens whose version
+    # no longer matches.  See apps/accounts/authentication.py.
+    token_version = models.PositiveIntegerField(
+        default=0,
+        help_text='Increment to revoke all previously issued access tokens.',
     )
 
     # ── Account-level brute-force lockout ──
@@ -150,6 +177,28 @@ class User(AbstractUser):
             self.failed_login_attempts = 0
             self.locked_until = None
             self.save(update_fields=['failed_login_attempts', 'locked_until'])
+
+    def revoke_all_sessions(self):
+        """Invalidate every outstanding session for this account.
+
+        Bumps `token_version` so that all previously issued access tokens
+        fail the version check in the custom JWT authentication, and
+        blacklists every outstanding refresh token so none of them can mint
+        a new access token.  The caller is responsible for persisting the
+        version bump (this method only mutates the in-memory instance).
+
+        Blacklisting (rather than deleting) the outstanding tokens is
+        deliberate: deleting them would cascade-delete their blacklist
+        entries and could un-revoke a token.
+        """
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+
+        self.token_version = (self.token_version or 0) + 1
+        for outstanding in OutstandingToken.objects.filter(user=self):
+            BlacklistedToken.objects.get_or_create(token=outstanding)
 
 
 class IdentityDocument(models.Model):

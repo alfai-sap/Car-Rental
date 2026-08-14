@@ -64,8 +64,6 @@ class SecurityHeadersMiddleware:
 
         # ── Additional production-only headers ──
         if not settings.DEBUG:
-            # Tell browsers to always check for certificate revocation
-            response['Expect-CT'] = 'max-age=86400, enforce'
             # DNS prefetch control
             response['X-DNS-Prefetch-Control'] = 'off'
 

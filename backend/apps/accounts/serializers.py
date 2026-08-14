@@ -59,16 +59,18 @@ def _get_token_timeout():
 account_token_generator = AccountTokenGenerator()
 
 
-def _identity_image_token(doc_pk, user_pk):
+def _identity_image_token(doc_pk, user_pk, side):
     """Short-lived signed token for identity document image access (5 min).
 
-    Encodes both the document ID and the user ID so that the image view
-    can verify ownership cryptographically — no Authorization header
-    needed.  This allows <img> tags to load identity documents securely.
+    Encodes the document ID, the user ID, and the image side so that the
+    image view can verify ownership and which side is being served
+    cryptographically — no Authorization header needed.  This allows
+    <img> tags to load identity documents securely, and a token for one
+    side cannot be replayed against the other side.
 
-    Format: "doc_pk.user_pk"
+    Format: "doc_pk.user_pk.side"
     """
-    return account_token_generator._email_verifier.signer.sign(f'{doc_pk}.{user_pk}')
+    return account_token_generator._email_verifier.signer.sign(f'{doc_pk}.{user_pk}.{side}')
 
 
 def _identity_snapshot_image_token(booking_id, user_id, doc_index, side):
@@ -230,11 +232,12 @@ class IdentityDocumentSerializer(serializers.ModelSerializer):
         # Build a token that cryptographically binds the document to its owner.
         # The image view will verify ownership from the token alone — no
         # Authorization header required, so <img> tags work in the browser.
-        token = _identity_image_token(instance.id, instance.user_id)
+        front_token = _identity_image_token(instance.id, instance.user_id, 'front')
+        back_token = _identity_image_token(instance.id, instance.user_id, 'back')
         if instance.front_image:
-            data['front_image'] = f'/api/identity-documents/{instance.id}/image/front/?token={token}'
+            data['front_image'] = f'/api/identity-documents/{instance.id}/image/front/?token={front_token}'
         if instance.back_image:
-            data['back_image'] = f'/api/identity-documents/{instance.id}/image/back/?token={token}'
+            data['back_image'] = f'/api/identity-documents/{instance.id}/image/back/?token={back_token}'
         return data
 
 

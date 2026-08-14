@@ -54,6 +54,46 @@ class PaymentCreateSessionView(APIView):
         checkout_url = None
         provider = Payment.PROVIDER_PAYMONGO if payment_gateway_enabled() else Payment.PROVIDER_DISABLED
 
+        # ── Idempotency: reuse an existing open checkout ──
+        # Re-attempts must not create duplicate PayMongo sessions (each with
+        # its own live checkout URL) for the same booking.  Only an unexpired
+        # PENDING payment still has a live checkout URL worth reusing.
+        # FAILED and EXPIRED payments are superseded — a customer whose
+        # payment failed, or whose checkout expired, can simply retry to get
+        # a fresh session, so we fall through and create a new one.
+        existing_payment = Payment.objects.filter(
+            booking=booking,
+            payment_status=Payment.STATUS_PENDING,
+            provider=provider,
+        ).select_related('invoice').order_by('-created_at').first()
+
+        if existing_payment and existing_payment.checkout_url:
+            return Response({
+                'detail': 'An active payment session already exists for this booking.',
+                'checkout_url': existing_payment.checkout_url,
+                'payment': {
+                    'id': existing_payment.id,
+                    'payment_number': existing_payment.payment_number,
+                    'payment_status': existing_payment.payment_status,
+                },
+                'invoice': {
+                    'id': existing_payment.invoice_id,
+                    'invoice_number': existing_payment.invoice.invoice_number if existing_payment.invoice else None,
+                    'invoice_status': existing_payment.invoice.invoice_status if existing_payment.invoice else None,
+                    'total': str(existing_payment.invoice.total) if existing_payment.invoice else None,
+                },
+            })
+
+        # ── Determine the exact amount to charge ──
+        # It must equal what the webhook later verifies (invoice.total):
+        # booking.estimated_total plus any admin-added additional charges
+        # already recorded on the invoice.  This prevents an amount-mismatch
+        # dead-end where the customer is charged less than the invoice total.
+        existing_invoice = Invoice.objects.filter(booking=booking).first()
+        charge_amount = booking.estimated_total
+        if existing_invoice and (existing_invoice.additional_charges or 0) != 0:
+            charge_amount = existing_invoice.total
+
         # ── Call PayMongo FIRST before any DB writes ──
         # This prevents the booking from being left in 'awaiting_payment'
         # with no checkout URL if the PayMongo API is unreachable.
@@ -66,7 +106,7 @@ class PaymentCreateSessionView(APIView):
                 description = f'Rental: {vehicle_name} ({booking.pickup_date} – {booking.return_date})'
 
                 paymongo_result = create_checkout_session(
-                    amount=booking.estimated_total,
+                    amount=charge_amount,
                     currency='PHP',
                     description=description,
                     payment_reference=f'PMT-{booking.booking_number}',
@@ -113,6 +153,11 @@ class PaymentCreateSessionView(APIView):
                 invoice.discount = booking.discount_amount
                 invoice.save(update_fields=['subtotal', 'discount', 'total', 'updated_at'])
 
+            # The PayMongo session amount and the stored Payment.amount must
+            # match what the webhook will verify (invoice.total), otherwise a
+            # paid webhook fails amount verification.  In practice the initial
+            # amount equals invoice.total because additional_charges is 0 on
+            # checkout creation; this guard keeps the invariant explicit.
             payment = Payment.objects.create(
                 booking=booking,
                 invoice=invoice,
@@ -326,9 +371,16 @@ class PaymentWebhookView(APIView):
                 logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
                 return Response({'detail': 'Event already processed.'})
 
-            notify.notify_payment_successful(booking)
             if booking.status == 'confirmed':
+                notify.notify_payment_successful(booking)
                 notify.notify_booking_confirmed(booking)
+            else:
+                # Payment arrived for a booking that is no longer active
+                # (e.g. it was cancelled/rejected while the customer was on
+                # the PayMongo page).  Never send a "Booking Finalized" email
+                # for a booking that was never finalized — alert support
+                # instead so a refund can be arranged.
+                notify.notify_payment_received_inactive(booking)
             logger.info(
                 'PayMongo webhook: payment %s confirmed for booking %s',
                 payment.payment_number, booking.booking_number,
@@ -357,8 +409,8 @@ class PaymentWebhookView(APIView):
                 with transaction.atomic():
                     payment.payment_status = Payment.STATUS_EXPIRED
                     payment.save()
-                    # Booking stays in awaiting_payment — customer can request a
-                    # new payment attempt via the request-repayment endpoint.
+                    # Booking stays in awaiting_payment — the customer can
+                    # retry payment and get a fresh checkout session.
             except IntegrityError:
                 logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
                 return Response({'detail': 'Event already processed.'})
@@ -393,9 +445,10 @@ class PaymentWebhookView(APIView):
             parts[key.strip()] = value.strip() if sep else ''
 
         timestamp = parts.get('t', '')
+        expiry = parts.get('te', '')
         expected_li = parts.get('li', '')
 
-        if not timestamp or not expected_li:
+        if not timestamp or not expiry or not expected_li:
             return False
 
         # ── Replay-attack protection: reject timestamps older than 5 min ──
@@ -414,8 +467,22 @@ class PaymentWebhookView(APIView):
             )
             return False
 
-        # Recompute HMAC-SHA256(t.te.body) with constant-time comparison
+        # ── Expiry enforcement ──
+        # PayMongo sends te=<expiry>.  Reject signatures that have expired.
+        try:
+            te = int(expiry)
+        except (TypeError, ValueError):
+            return False
+        if te < now_ts:
+            logger.warning(
+                'PayMongo webhook: signature expiry %s is in the past (now=%s)',
+                te, now_ts,
+            )
+            return False
+
+        # Recompute HMAC-SHA256(t.te.body) with constant-time comparison.
+        # This matches PayMongo's official signing format.
         secret = settings.PAYMONGO_WEBHOOK_SECRET.encode()
-        signed_payload = f'{timestamp}.{body.decode()}'.encode()
+        signed_payload = f'{timestamp}.{expiry}.{body.decode()}'.encode()
         computed = hmac.new(secret, signed_payload, hashlib.sha256).hexdigest()
         return hmac.compare_digest(computed, expected_li)

@@ -2,12 +2,15 @@
 Custom DRF exception handler — ensures all error responses
 (including 500, 403, 404) return JSON instead of HTML.
 """
+import logging
 import math
 
 from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.response import Response
 from rest_framework.exceptions import Throttled
 from rest_framework import status
+
+logger = logging.getLogger(__name__)
 
 
 def format_throttle_message(wait_seconds):
@@ -36,8 +39,10 @@ def custom_exception_handler(exc, context):
                 response.data = {'detail': format_throttle_message(wait)}
         return response
 
-    # Unhandled exception (e.g. a 500 server error) —
-    # return a consistent JSON error
+    # Unhandled exception (e.g. a 500 server error) — log it so the
+    # incident is diagnosable, then return a consistent JSON error
+    # without leaking internal details.
+    logger.exception('Unhandled exception in %s: %s', context.get('view'), exc)
     return Response(
         {
             'detail': 'An unexpected server error occurred.',
