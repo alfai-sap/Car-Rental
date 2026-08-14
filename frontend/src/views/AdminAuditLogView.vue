@@ -21,6 +21,7 @@ interface AuditActor {
 
 interface AuditBooking {
   id: number
+  hash_id: string
   booking_number: string
 }
 
@@ -344,7 +345,7 @@ const totalActionsToday = computed(() =>
               <span v-if="entry.booking" class="inline-flex items-center gap-1.5 text-xs">
                 <FileText class="w-3.5 h-3.5 text-zinc-400" />
                 <RouterLink
-                  :to="`/admin/transactions/${entry.booking.id}`"
+                  :to="`/admin/transactions/${entry.booking.hash_id}`"
                   class="text-zinc-700 hover:text-zinc-900 hover:underline font-mono"
                 >
                   {{ entry.booking.booking_number }}

@@ -17,6 +17,7 @@ interface VehicleImage {
 
 interface Vehicle {
   id: number
+  hash_id: string
   make: string
   model: string
   year: number
@@ -45,7 +46,7 @@ const loading = ref(true)
 const error = ref('')
 
 // Existing booking for this vehicle
-const existingBooking = ref<{ id: number; status: string; status_display: string; booking_number: string } | null>(null)
+const existingBooking = ref<{ id: number; hash_id: string; status: string; status_display: string; booking_number: string } | null>(null)
 const checkingBooking = ref(false)
 
 // Image gallery
@@ -133,16 +134,21 @@ onMounted(async () => {
     if (auth.isAuthenticated) {
       checkingBooking.value = true
       try {
-        const bookingRes = await api.get('/bookings/', { params: { vehicle: id } })
-        const userBookings: Array<{ id: number; status: string; status_display: string; booking_number: string; vehicle: number }> = bookingRes.data.results || bookingRes.data
+        // Use the numeric vehicle id (returned by the API) for filtering;
+        // the route param is an opaque hash id.
+        const vehiclePk = vehicle.value?.id
+        if (vehiclePk == null) return
+        const bookingRes = await api.get('/bookings/', { params: { vehicle: vehiclePk } })
+        const userBookings: Array<{ id: number; hash_id?: string; status: string; status_display: string; booking_number: string; vehicle: number }> = bookingRes.data.results || bookingRes.data
         const active = userBookings.find(b =>
-          b.vehicle === Number(id) &&
+          b.vehicle === Number(vehiclePk) &&
           ['pending_approval', 'approved', 'awaiting_payment', 'confirmed', 'active'].includes(b.status)
         )
         if (active) {
-          const detail = await api.get(`/bookings/${active.id}/`)
+          const detail = await api.get(`/bookings/${active.hash_id || active.id}/`)
           existingBooking.value = {
             id: detail.data.id,
+            hash_id: detail.data.hash_id,
             status: detail.data.status,
             status_display: detail.data.status_display,
             booking_number: detail.data.booking_number,
@@ -290,12 +296,12 @@ onMounted(async () => {
                 <p class="text-sm font-semibold text-zinc-900">{{ existingBooking.status_display }}</p>
                 <p class="text-xs text-zinc-400 mt-1">{{ existingBooking.booking_number }}</p>
               </div>
-              <RouterLink :to="`/transactions/${existingBooking.id}`">
+              <RouterLink :to="`/transactions/${existingBooking.hash_id}`">
                 <Button class="w-full" variant="ghost">View Transaction</Button>
               </RouterLink>
             </template>
             <template v-else>
-              <RouterLink v-if="vehicle.status === 'available'" :to="`/vehicles/${vehicle.id}/book`">
+              <RouterLink v-if="vehicle.status === 'available'" :to="`/vehicles/${vehicle.hash_id}/book`">
                 <Button class="w-full">Book Now</Button>
               </RouterLink>
               <Button v-else class="w-full" disabled>Unavailable</Button>

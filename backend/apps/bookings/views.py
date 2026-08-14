@@ -25,6 +25,7 @@ from apps.bookings.serializers import (
 )
 from apps.core import services as notify
 from apps.core.services import create_audit_log, compute_rental_pricing
+from apps.core.ids import HashedIdLookupMixin
 from apps.vehicles.models import Vehicle, VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,8 @@ def _build_identity_snapshot(user):
 #  Booking ViewSet
 # ─────────────────────────────────────────────
 
-class BookingViewSet(viewsets.ModelViewSet):
+class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
+    hashed_id_model_name = 'booking'
     queryset = Booking.objects.select_related(
         'customer', 'vehicle', 'vehicle_unit',
     ).prefetch_related(

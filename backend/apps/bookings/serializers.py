@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking, AssignmentHistory
 from apps.accounts.serializers import _identity_image_token, _identity_snapshot_image_token
+from apps.core.ids import HashedIdField
 from apps.vehicles.models import VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
 # Statuses that occupy a VehicleUnit
@@ -9,6 +10,8 @@ UNIT_OCCUPYING_STATUSES = ['approved', 'awaiting_payment', 'confirmed', 'waiting
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    hash_id = HashedIdField('booking', source='id', read_only=True)
+    vehicle_hash_id = HashedIdField('vehicle', source='vehicle_id', read_only=True)
     customer_email = serializers.EmailField(source='customer.email', read_only=True)
     customer_name = serializers.SerializerMethodField(read_only=True)
     customer_phone = serializers.CharField(source='customer.phone', read_only=True)
@@ -28,9 +31,9 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = [
-            'id', 'booking_number', 'customer', 'customer_email', 'customer_name',
+            'id', 'hash_id', 'booking_number', 'customer', 'customer_email', 'customer_name',
             'customer_phone', 'customer_identity_docs', 'identity_snapshot',
-            'vehicle', 'vehicle_name', 'vehicle_images', 'vehicle_unit',
+            'vehicle', 'vehicle_hash_id', 'vehicle_name', 'vehicle_images', 'vehicle_unit',
             'vehicle_unit_plate', 'vehicle_unit_status', 'assigned_by',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'discount_percent', 'discount_amount',
@@ -220,6 +223,8 @@ class BookingStatusUpdateSerializer(serializers.ModelSerializer):
 
 class DashboardBookingSerializer(serializers.ModelSerializer):
     """Lightweight serializer for customer dashboard listing."""
+    hash_id = HashedIdField('booking', source='id', read_only=True)
+    vehicle_hash_id = HashedIdField('vehicle', source='vehicle_id', read_only=True)
     vehicle_name = serializers.SerializerMethodField(read_only=True)
     vehicle_image = serializers.SerializerMethodField(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -227,7 +232,8 @@ class DashboardBookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = [
-            'id', 'booking_number', 'vehicle', 'vehicle_name', 'vehicle_image',
+            'id', 'hash_id', 'booking_number', 'vehicle', 'vehicle_hash_id',
+            'vehicle_name', 'vehicle_image',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
@@ -255,6 +261,7 @@ class DashboardBookingSerializer(serializers.ModelSerializer):
 
 class AdminDashboardBookingSerializer(serializers.ModelSerializer):
     """Serializer for admin dashboard listing with customer info."""
+    hash_id = HashedIdField('booking', source='id', read_only=True)
     customer_email = serializers.EmailField(source='customer.email', read_only=True)
     customer_name = serializers.SerializerMethodField(read_only=True)
     vehicle_name = serializers.SerializerMethodField(read_only=True)
@@ -263,7 +270,7 @@ class AdminDashboardBookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = [
-            'id', 'booking_number', 'customer', 'customer_email', 'customer_name',
+            'id', 'hash_id', 'booking_number', 'customer', 'customer_email', 'customer_name',
             'vehicle', 'vehicle_name', 'pickup_date', 'return_date', 'pickup_time', 'return_time',
             'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'created_at', 'updated_at',

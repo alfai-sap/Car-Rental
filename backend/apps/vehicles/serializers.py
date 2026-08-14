@@ -1,5 +1,6 @@
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
+from apps.core.ids import HashedIdField
 from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 
 
@@ -39,6 +40,7 @@ class VehicleImageSerializer(serializers.ModelSerializer):
 
 class VehicleListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list/catalog view — includes primary image and unit count."""
+    hash_id = HashedIdField('vehicle', source='id', read_only=True)
     primary_image = serializers.SerializerMethodField()
     total_units = serializers.SerializerMethodField()
     available_units = serializers.SerializerMethodField()
@@ -46,7 +48,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
+            'id', 'hash_id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'primary_image',
             'total_units', 'available_units', 'created_at',
         ]
@@ -76,6 +78,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
 
 class VehicleDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detail view — includes all images, unit counts (read only)."""
+    hash_id = HashedIdField('vehicle', source='id', read_only=True)
     images = VehicleImageSerializer(many=True, read_only=True)
     total_units = serializers.SerializerMethodField()
     available_units = serializers.SerializerMethodField()
@@ -86,7 +89,7 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vehicle
         fields = [
-            'id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
+            'id', 'hash_id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'description', 'images',
             'total_units', 'available_units',
             'discount_policy', 'weekly_price', 'monthly_price',

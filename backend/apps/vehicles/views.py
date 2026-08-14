@@ -2,6 +2,7 @@ from rest_framework import viewsets, filters
 from rest_framework.permissions import AllowAny, IsAdminUser, SAFE_METHODS
 from django_filters.rest_framework import DjangoFilterBackend
 
+from apps.core.ids import HashedIdLookupMixin
 from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 from apps.vehicles.serializers import (
     VehicleListSerializer,
@@ -20,7 +21,8 @@ class IsAdminOrReadOnly(IsAdminUser):
         return super().has_permission(request, view)
 
 
-class VehicleViewSet(viewsets.ModelViewSet):
+class VehicleViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
+    hashed_id_model_name = 'vehicle'
     queryset = Vehicle.objects.prefetch_related('images').filter(status='available')
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -49,11 +51,16 @@ class VehicleImageViewSet(viewsets.ModelViewSet):
     serializer_class = VehicleImageSerializer
     permission_classes = [IsAdminOrReadOnly]
 
+    def _vehicle_pk(self):
+        from apps.core.ids import resolve_pk_or_404
+
+        return resolve_pk_or_404('vehicle', self.kwargs.get('vehicle_pk'))
+
     def get_queryset(self):
-        return VehicleImage.objects.filter(vehicle_id=self.kwargs.get('vehicle_pk'))
+        return VehicleImage.objects.filter(vehicle_id=self._vehicle_pk())
 
     def perform_create(self, serializer):
-        serializer.save(vehicle_id=self.kwargs['vehicle_pk'])
+        serializer.save(vehicle_id=self._vehicle_pk())
 
 
 class VehicleUnitViewSet(viewsets.ModelViewSet):
@@ -65,10 +72,15 @@ class VehicleUnitViewSet(viewsets.ModelViewSet):
     lookup_field = 'pk'
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 
+    def _vehicle_pk(self):
+        from apps.core.ids import resolve_pk_or_404
+
+        return resolve_pk_or_404('vehicle', self.kwargs.get('vehicle_pk'))
+
     def get_queryset(self):
         return VehicleUnit.objects.select_related('vehicle').filter(
-            vehicle_id=self.kwargs.get('vehicle_pk')
+            vehicle_id=self._vehicle_pk()
         )
 
     def perform_create(self, serializer):
-        serializer.save(vehicle_id=self.kwargs['vehicle_pk'])
+        serializer.save(vehicle_id=self._vehicle_pk())

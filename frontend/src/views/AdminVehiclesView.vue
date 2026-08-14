@@ -17,6 +17,7 @@ interface VehicleImage {
 
 interface VehicleItem {
   id: number
+  hash_id: string
   make: string
   model: string
   year: number
@@ -357,7 +358,7 @@ onMounted(fetchVehicles)
           <RouterLink
             v-for="vehicle in paginatedVehicles"
             :key="vehicle.id"
-            :to="`/admin/vehicles/${vehicle.id}`"
+            :to="`/admin/vehicles/${vehicle.hash_id}`"
             class="block rounded-md border border-zinc-200 bg-white p-4 hover:border-zinc-400 transition-colors cursor-pointer"
           >
             <div class="flex items-start gap-4">

@@ -13,6 +13,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
 
 from apps.core.models import AuditLog, RentalDiscountPolicy, DiscountTier
+from apps.core.ids import encode_id
 
 
 @api_view(['GET'])
@@ -116,6 +117,7 @@ class AuditLogListView(APIView):
                 },
                 'booking': {
                     'id': log.booking_id,
+                    'hash_id': encode_id('booking', log.booking_id) if log.booking_id else None,
                     'booking_number': log.booking.booking_number if log.booking else None,
                 } if log.booking_id else None,
                 'payment': {

@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.core.models import Notification, AuditLog
+from apps.core.ids import encode_id
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +182,7 @@ def _build_plain_text(subject, ctx):
     if ctx.get('estimated_total'):
         lines.append(f"Total: ₱{ctx['estimated_total']}")
     if ctx.get('booking') and ctx.get('booking').id:
-        lines.append(f"View: {settings.FRONTEND_URL}/transactions/{ctx['booking'].id}")
+        lines.append(f"View: {settings.FRONTEND_URL}/transactions/{encode_id('booking', ctx['booking'].id)}")
     lines.extend(["", "– Car Rental Team"])
     return "\n".join(lines)
 
@@ -195,11 +196,11 @@ def _vehicle_name(booking):
 
 
 def _booking_link(booking):
-    return f"/transactions/{booking.id}"
+    return f"/transactions/{encode_id('booking', booking.id)}"
 
 
 def _admin_link(booking):
-    return f"/admin/transactions/{booking.id}"
+    return f"/admin/transactions/{encode_id('booking', booking.id)}"
 
 
 # ── Customer notifications ──
@@ -483,6 +484,8 @@ def _email_context(booking):
         'first_name': booking.customer.first_name or 'there',
         'booking': booking,
         'booking_number': booking.booking_number,
+        'booking_hash_id': encode_id('booking', booking.id),
+        'frontend_url': settings.FRONTEND_URL,
         'vehicle_name': _vehicle_name(booking),
         'pickup_date': booking.pickup_date,
         'return_date': booking.return_date,

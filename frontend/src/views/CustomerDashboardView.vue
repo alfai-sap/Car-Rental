@@ -26,6 +26,8 @@ interface BookingSummary {
 
 interface BookingItem {
   id: number
+  hash_id: string
+  vehicle_hash_id: string
   booking_number: string
   vehicle: number
   vehicle_name: string
@@ -441,13 +443,13 @@ onMounted(() => {
 
               <div class="flex items-center gap-2 pt-1">
                 <RouterLink
-                  :to="`/vehicles/${booking.vehicle}`"
+                  :to="`/vehicles/${booking.vehicle_hash_id}`"
                   class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900"
                 >
                   <ExternalLink class="h-3 w-3" /> View Vehicle
                 </RouterLink>
                 <RouterLink
-                  :to="`/transactions/${booking.id}`"
+                  :to="`/transactions/${booking.hash_id}`"
                   class="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 ml-auto"
                 >
                   <ExternalLink class="h-3 w-3" /> View Transaction

@@ -26,6 +26,7 @@ interface AdminSummary {
 
 interface AdminBookingItem {
   id: number
+  hash_id: string
   booking_number: string
   customer: number
   customer_email: string
@@ -459,7 +460,7 @@ onMounted(async () => {
                     </td>
                     <td class="px-4 py-3 text-right" @click.stop>
                       <RouterLink
-                        :to="`/admin/transactions/${booking.id}`"
+                        :to="`/admin/transactions/${booking.hash_id}`"
                         class="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
                       >
                         View

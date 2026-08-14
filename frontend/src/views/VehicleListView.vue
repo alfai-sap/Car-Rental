@@ -8,6 +8,7 @@ import api from '@/services/api'
 
 interface Vehicle {
   id: number
+  hash_id: string
   make: string
   model: string
   year: number
@@ -123,7 +124,7 @@ onMounted(fetchVehicles)
         <RouterLink
           v-for="vehicle in vehicles"
           :key="vehicle.id"
-          :to="`/vehicles/${vehicle.id}`"
+          :to="`/vehicles/${vehicle.hash_id}`"
           class="group rounded-lg border border-zinc-200 bg-white overflow-hidden hover:border-zinc-300 hover:shadow-sm transition"
         >
           <div class="aspect-[16/10] bg-zinc-100 flex items-center justify-center overflow-hidden">

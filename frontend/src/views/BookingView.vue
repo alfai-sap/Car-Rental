@@ -10,6 +10,7 @@ import api from '@/services/api'
 
 interface Vehicle {
   id: number
+  hash_id: string
   make: string
   model: string
   year: number
@@ -309,7 +310,7 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
       <template v-else-if="vehicle">
         <!-- Back Link -->
-        <RouterLink :to="`/vehicles/${vehicle.id}`" class="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-6">
+        <RouterLink :to="`/vehicles/${vehicle.hash_id}`" class="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 mb-6">
           <ChevronLeft class="h-4 w-4" /> Back to vehicle
         </RouterLink>
 
