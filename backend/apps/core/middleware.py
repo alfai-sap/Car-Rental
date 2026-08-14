@@ -24,12 +24,12 @@ class SecurityHeadersMiddleware:
         if settings.DEBUG:
             csp = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self'; "
-                "connect-src 'self' ws://localhost:* http://localhost:*; "
-                "frame-src https://paymongo.com https://pm.paymongo.com; "
+                "connect-src 'self' ws://localhost:* http://localhost:* https://accounts.google.com; "
+                "frame-src https://paymongo.com https://pm.paymongo.com https://accounts.google.com; "
                 "form-action 'self'; "
                 "base-uri 'self'; "
                 "object-src 'none'"
@@ -37,12 +37,12 @@ class SecurityHeadersMiddleware:
         else:
             csp = (
                 "default-src 'self'; "
-                "script-src 'self'; "
+                "script-src 'self' https://accounts.google.com; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "font-src 'self'; "
-                "connect-src 'self'; "
-                "frame-src https://paymongo.com https://pm.paymongo.com; "
+                "connect-src 'self' https://accounts.google.com; "
+                "frame-src https://*.paymongo.com https://paymongo.com https://pm.paymongo.com; "
                 "form-action 'self'; "
                 "base-uri 'self'; "
                 "object-src 'none'"

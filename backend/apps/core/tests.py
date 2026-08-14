@@ -344,3 +344,130 @@ class NotificationAPITests(TestCase):
                 user=self.customer, notification_type='transaction_completed',
             ).exists()
         )
+
+
+class DiscountPolicyTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            email='admin@test.com', username='admin', password='Admin123!',
+            is_staff=True, is_superuser=True,
+        )
+        self.vehicle = Vehicle.objects.create(
+            make='Toyota', model='Vios', year=2024, type='sedan',
+            price_per_day=1000.00,
+        )
+
+    def _make_policy(self, is_default=True, name='Global'):
+        from apps.core.models import RentalDiscountPolicy, DiscountTier
+
+        policy = RentalDiscountPolicy.objects.create(
+            name=name, is_default=is_default,
+        )
+        for min_days, percent in [(1, 0), (7, 10), (30, 20)]:
+            DiscountTier.objects.create(
+                policy=policy, min_days=min_days, discount_percent=percent,
+            )
+        return policy
+
+    def test_default_policy_is_singleton(self):
+        from apps.core.models import RentalDiscountPolicy
+
+        self._make_policy()
+        # Creating a second default should demote the first.
+        second = self._make_policy(name='Global 2')
+        self.assertTrue(second.is_default)
+        self.assertEqual(RentalDiscountPolicy.objects.filter(is_default=True).count(), 1)
+
+    def test_discount_percent_for_days(self):
+        policy = self._make_policy()
+        self.assertEqual(policy.discount_percent_for_days(3), 0)
+        self.assertEqual(policy.discount_percent_for_days(7), 10)
+        self.assertEqual(policy.discount_percent_for_days(29), 10)
+        self.assertEqual(policy.discount_percent_for_days(30), 20)
+        self.assertEqual(policy.discount_percent_for_days(90), 20)
+
+    def test_compute_rental_pricing_applies_discount(self):
+        from apps.core.services import compute_rental_pricing
+
+        self._make_policy()
+        # 3 days → no discount
+        p3 = compute_rental_pricing(self.vehicle, 3)
+        self.assertEqual(p3['subtotal'], 3000)
+        self.assertEqual(p3['estimated_total'], 3000)
+        self.assertEqual(p3['discount_percent'], 0)
+
+        # 10 days → 10% off
+        p10 = compute_rental_pricing(self.vehicle, 10)
+        self.assertEqual(p10['subtotal'], 10000)
+        self.assertEqual(p10['discount_amount'], 1000)
+        self.assertEqual(p10['estimated_total'], 9000)
+
+        # 30 days → 20% off
+        p30 = compute_rental_pricing(self.vehicle, 30)
+        self.assertEqual(p30['estimated_total'], 24000)
+
+    def test_vehicle_override_wins_over_default(self):
+        from apps.core.models import RentalDiscountPolicy, DiscountTier
+        from apps.core.services import get_effective_discount_policy, compute_rental_pricing
+
+        self._make_policy()
+        override = RentalDiscountPolicy.objects.create(name='Override')
+        DiscountTier.objects.create(policy=override, min_days=1, discount_percent=50)
+
+        self.vehicle.discount_policy = override
+        self.vehicle.save()
+
+        self.assertEqual(get_effective_discount_policy(self.vehicle), override)
+        p = compute_rental_pricing(self.vehicle, 10)
+        self.assertEqual(p['discount_percent'], 50)
+        self.assertEqual(p['estimated_total'], 5000)
+
+    def test_booking_uses_discounted_total(self):
+        from apps.bookings.models import Booking
+
+        self._make_policy()
+        booking = Booking.objects.create(
+            customer=self.admin,
+            vehicle=self.vehicle,
+            pickup_date=date.today() + timedelta(days=1),
+            return_date=date.today() + timedelta(days=30),
+            pickup_time='09:00',
+        )
+        self.assertEqual(booking.rental_days, 30)
+        self.assertEqual(booking.subtotal, 30000)
+        self.assertEqual(booking.discount_percent, 20)
+        self.assertEqual(booking.estimated_total, 24000)
+
+    # ── API ──
+
+    def test_discount_policy_api_requires_staff(self):
+        response = self.client.get('/api/admin/discount-policy/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_discount_policy_api_create_and_get(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post('/api/admin/discount-policy/', {
+            'name': 'Global Rental Discount Policy',
+            'description': 'Fleet-wide.',
+            'is_default': True,
+            'tiers': [
+                {'min_days': 1, 'discount_percent': 0},
+                {'min_days': 7, 'discount_percent': 10},
+                {'min_days': 30, 'discount_percent': 20},
+            ],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data['tiers']), 3)
+
+        get_resp = self.client.get('/api/admin/discount-policy/')
+        self.assertEqual(get_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(get_resp.data['policies']), 1)
+        self.assertEqual(get_resp.data['policies'][0]['tiers'][1]['discount_percent'], '10.00')
+
+    def test_public_discount_policy(self):
+        self._make_policy()
+        response = self.client.get('/api/discount-policy/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['configured'])
+        self.assertEqual(len(response.data['tiers']), 3)

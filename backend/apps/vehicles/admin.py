@@ -19,7 +19,7 @@ class VehicleAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Basic Info', {'fields': ('make', 'model', 'year', 'type', 'description')}),
         ('Specifications', {'fields': ('transmission', 'fuel', 'seats')}),
-        ('Pricing & Status', {'fields': ('price_per_day', 'status')}),
+        ('Pricing & Status', {'fields': ('price_per_day', 'discount_policy', 'status')}),
     )
 
     def delete_model(self, request, obj):

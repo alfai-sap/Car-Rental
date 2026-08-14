@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from apps.core.validators import validate_image_size, validate_image_content
@@ -53,11 +55,22 @@ class Vehicle(models.Model):
     seats = models.PositiveSmallIntegerField(default=5)
     price_per_day = models.DecimalField(
         max_digits=10, decimal_places=2,
-        validators=[MinValueValidator(0.01)],
+        validators=[MinValueValidator(Decimal('0.01'))],
         help_text='Daily rental price (must be greater than 0).',
     )
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='available')
     description = models.TextField(blank=True)
+    # Optional per-vehicle discount policy override.  When null, the vehicle
+    # follows the global default policy (see apps.core.RentalDiscountPolicy).
+    discount_policy = models.ForeignKey(
+        'core.RentalDiscountPolicy',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vehicles',
+        help_text='Optional discount policy override for this vehicle. '
+                  'Leave blank to use the global default policy.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

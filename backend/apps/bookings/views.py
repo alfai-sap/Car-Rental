@@ -24,7 +24,7 @@ from apps.bookings.serializers import (
     AssignmentHistorySerializer, UnitAssignmentSerializer,
 )
 from apps.core import services as notify
-from apps.core.services import create_audit_log
+from apps.core.services import create_audit_log, compute_rental_pricing
 from apps.vehicles.models import Vehicle, VehicleUnit
 
 logger = logging.getLogger(__name__)
@@ -86,22 +86,6 @@ def _build_identity_snapshot(user):
         'documents': documents,
         'captured_at': timezone.now().isoformat(),
     }
-
-
-def _find_available_unit(vehicle, pickup_date, return_date):
-    """Find an available VehicleUnit for the given vehicle and date range."""
-    booked_unit_ids = Booking.objects.filter(
-        vehicle=vehicle,
-        vehicle_unit__isnull=False,
-        status__in=UNIT_OCCUPYING_STATUSES,
-        pickup_date__lt=return_date,
-        return_date__gt=pickup_date,
-    ).values_list('vehicle_unit_id', flat=True)
-
-    return VehicleUnit.objects.filter(
-        vehicle=vehicle,
-        status='available',
-    ).exclude(id__in=booked_unit_ids).first()
 
 
 # ─────────────────────────────────────────────
@@ -699,7 +683,7 @@ class AvailabilityView(viewsets.ViewSet):
         available = available_count > 0
 
         rental_days = max(1, (end - start).days + 1)
-        subtotal = vehicle.price_per_day * rental_days
+        pricing = compute_rental_pricing(vehicle, rental_days)
 
         return Response({
             'available': available,
@@ -707,9 +691,12 @@ class AvailabilityView(viewsets.ViewSet):
             'total_units': total_units,
             'available_units': available_count,
             'rental_days': rental_days,
-            'price_per_day': str(vehicle.price_per_day),
-            'subtotal': str(subtotal),
-            'estimated_total': str(subtotal),
+            'price_per_day': str(pricing['price_per_day']),
+            'subtotal': str(pricing['subtotal']),
+            'discount_percent': str(pricing['discount_percent']),
+            'discount_amount': str(pricing['discount_amount']),
+            'discount_policy': pricing['discount_policy'],
+            'estimated_total': str(pricing['estimated_total']),
         })
 
 

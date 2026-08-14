@@ -6,6 +6,7 @@ No sensitive payment credentials (card numbers, CVV, GCash PIN) ever
 touch this server.  The customer completes payment on PayMongo's
 secure hosted page.
 """
+import base64
 import logging
 from typing import Optional, Dict, Any
 
@@ -30,7 +31,6 @@ def _headers() -> Dict[str, str]:
 
 def _encode_basic_auth(secret_key: str) -> str:
     """Base64-encode the secret key for HTTP Basic Auth."""
-    import base64
     return base64.b64encode(f'{secret_key}:'.encode()).decode()
 
 
@@ -40,7 +40,7 @@ class PayMongoError(Exception):
 
 def create_checkout_session(
     *,
-    amount: float,
+    amount,
     currency: str = 'PHP',
     description: str,
     payment_reference: str,
@@ -52,6 +52,10 @@ def create_checkout_session(
 ) -> Dict[str, Any]:
     """Create a PayMongo Checkout Session and return its details.
 
+    `amount` may be a Decimal (preferred) or float, expressed in the base
+    currency unit (e.g. PHP pesos).  It is converted to integer centavos
+    exactly to avoid floating-point rounding errors.
+
     Returns a dict with:
         checkout_url  — where the customer pays
         session_id    — PayMongo session ID
@@ -60,10 +64,15 @@ def create_checkout_session(
 
     Raises PayMongoError on failure.
     """
+    from decimal import Decimal
+
     url = f'{PAYMONGO_API_BASE}/checkout_sessions'
 
+    # Convert to integer centavos exactly (avoid float rounding errors).
+    amount_cents = int(Decimal(str(amount)) * 100)
+
     line_items = [{
-        'amount': int(amount * 100),  # PayMongo uses centavos
+        'amount': amount_cents,  # PayMongo uses centavos
         'currency': currency,
         'description': description[:255],
         'name': description[:100],
@@ -78,8 +87,7 @@ def create_checkout_session(
                     'card',
                     'gcash',
                     'grab_pay',
-                    'maya',
-                    'paymaya',  # backwards compat
+                    'paymaya',
                 ],
                 'send_email_receipt': bool(customer_email),
                 'show_description': True,
@@ -110,7 +118,11 @@ def create_checkout_session(
         logger.error('PayMongo checkout request failed: %s', e)
         raise PayMongoError(f'Failed to connect to PayMongo: {e}')
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.error('PayMongo checkout returned non-JSON (HTTP %s)', response.status_code)
+        raise PayMongoError('PayMongo returned an unexpected response.')
 
     if response.status_code not in (200, 201):
         error_detail = _extract_error(data)
@@ -153,7 +165,11 @@ def retrieve_payment(paymongo_payment_id: str) -> Dict[str, Any]:
         logger.error('PayMongo payment retrieval failed: %s', e)
         raise PayMongoError(f'Failed to connect to PayMongo: {e}')
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.error('PayMongo payment retrieval returned non-JSON (HTTP %s)', response.status_code)
+        raise PayMongoError('PayMongo returned an unexpected response.')
 
     if response.status_code != 200:
         raise PayMongoError(_extract_error(data))

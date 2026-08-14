@@ -1,6 +1,9 @@
-from django.db import connections, models
+from decimal import Decimal
+
+from django.db import connections, models, transaction
 from django.db.models import Q
 from django.db.utils import OperationalError
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -9,7 +12,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
 
-from apps.core.models import AuditLog
+from apps.core.models import AuditLog, RentalDiscountPolicy, DiscountTier
 
 
 @api_view(['GET'])
@@ -132,5 +135,159 @@ class AuditLogListView(APIView):
             'total_pages': total_pages,
             'action_stats': action_stats,
             'results': data,
+        })
+
+
+class RentalDiscountPolicyView(APIView):
+    """Admin CRUD for the global rental discount policy.
+
+    Staff-only.  The fleet-wide default policy (with its duration tiers) is
+    managed here.  A policy marked `is_default` becomes the policy all
+    vehicles follow unless a vehicle has an explicit override.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _serialize_policy(self, policy):
+        return {
+            'id': policy.id,
+            'name': policy.name,
+            'description': policy.description,
+            'is_default': policy.is_default,
+            'tiers': [
+                {
+                    'id': tier.id,
+                    'min_days': tier.min_days,
+                    'discount_percent': str(tier.discount_percent),
+                }
+                for tier in policy.tiers.all()
+            ],
+            'created_at': policy.created_at.isoformat(),
+            'updated_at': policy.updated_at.isoformat(),
+        }
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        policies = RentalDiscountPolicy.objects.prefetch_related('tiers').all()
+        return Response({
+            'default_policy_id': (
+                RentalDiscountPolicy.get_default().id
+                if RentalDiscountPolicy.get_default() else None
+            ),
+            'policies': [self._serialize_policy(p) for p in policies],
+        })
+
+    def post(self, request):
+        """Create or update a policy, replacing its tiers atomically."""
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        policy_id = request.data.get('id')
+        name = (request.data.get('name') or '').strip()
+        description = (request.data.get('description') or '').strip()
+        is_default = bool(request.data.get('is_default', False))
+        tiers_data = request.data.get('tiers') or []
+
+        if not name:
+            return Response({'name': 'Policy name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate and normalize tiers
+        normalized_tiers = []
+        seen_min_days = set()
+        for tier in tiers_data:
+            try:
+                min_days = int(tier.get('min_days', 1))
+                percent = Decimal(str(tier.get('discount_percent', 0)))
+            except (TypeError, ValueError):
+                return Response(
+                    {'tiers': 'Each tier requires a valid min_days and discount_percent.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if min_days < 1:
+                return Response({'tiers': 'min_days must be at least 1.'}, status=status.HTTP_400_BAD_REQUEST)
+            if percent < 0 or percent > 100:
+                return Response({'tiers': 'discount_percent must be between 0 and 100.'}, status=status.HTTP_400_BAD_REQUEST)
+            if min_days in seen_min_days:
+                return Response({'tiers': f'Duplicate min_days value: {min_days}.'}, status=status.HTTP_400_BAD_REQUEST)
+            seen_min_days.add(min_days)
+            normalized_tiers.append({'min_days': min_days, 'discount_percent': percent})
+
+        if not normalized_tiers:
+            return Response({'tiers': 'At least one tier is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Ensure a 0% base tier exists for short rentals
+        if not any(t['min_days'] == 1 for t in normalized_tiers):
+            normalized_tiers.insert(0, {'min_days': 1, 'discount_percent': Decimal('0')})
+
+        with transaction.atomic():
+            if policy_id:
+                policy = get_object_or_404(RentalDiscountPolicy, pk=policy_id)
+                policy.name = name
+                policy.description = description
+                policy.is_default = is_default
+                policy.save()
+            else:
+                policy = RentalDiscountPolicy.objects.create(
+                    name=name,
+                    description=description,
+                    is_default=is_default,
+                )
+
+            # Replace tiers
+            policy.tiers.all().delete()
+            DiscountTier.objects.bulk_create([
+                DiscountTier(
+                    policy=policy,
+                    min_days=t['min_days'],
+                    discount_percent=t['discount_percent'],
+                )
+                for t in normalized_tiers
+            ])
+
+        return Response(self._serialize_policy(policy), status=status.HTTP_201_CREATED if not policy_id else status.HTTP_200_OK)
+
+    def delete(self, request):
+        """Delete a policy by id (cannot delete the default policy)."""
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        policy_id = request.data.get('id')
+        if not policy_id:
+            return Response({'id': 'Policy id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        policy = get_object_or_404(RentalDiscountPolicy, pk=policy_id)
+        if policy.is_default:
+            return Response(
+                {'detail': 'The default policy cannot be deleted. Mark another policy as default first.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        policy.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PublicDiscountPolicyView(APIView):
+    """Public read-only view of the active global discount policy.
+
+    Used by the customer-facing pricing UI so discounts are transparent.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        default = RentalDiscountPolicy.get_default()
+        if not default:
+            return Response({'configured': False})
+
+        return Response({
+            'configured': True,
+            'name': default.name,
+            'tiers': [
+                {
+                    'min_days': tier.min_days,
+                    'discount_percent': str(tier.discount_percent),
+                }
+                for tier in default.tiers.all()
+            ],
         })
 

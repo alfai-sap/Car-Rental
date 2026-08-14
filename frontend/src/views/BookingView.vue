@@ -61,6 +61,9 @@ const availability = ref<{
   rental_days?: number
   price_per_day?: string
   subtotal?: string
+  discount_percent?: string
+  discount_amount?: string
+  discount_policy?: string | null
   estimated_total?: string
 } | null>(null)
 
@@ -203,7 +206,14 @@ const rentalDays = computed(() => {
 
 const pricePerDay = computed(() => vehicle.value ? Number(vehicle.value.price_per_day) : 0)
 
+// Prefer server-computed pricing (includes discount) once availability is known.
+const subtotal = computed(() => availability.value?.subtotal !== undefined ? Number(availability.value.subtotal) : null)
+const discountPercent = computed(() => availability.value?.discount_percent !== undefined ? Number(availability.value.discount_percent) : null)
+const discountAmount = computed(() => availability.value?.discount_amount !== undefined ? Number(availability.value.discount_amount) : null)
 const estimatedTotal = computed(() => {
+  if (availability.value?.estimated_total !== undefined) {
+    return Number(availability.value.estimated_total)
+  }
   if (rentalDays.value === null) return null
   return pricePerDay.value * rentalDays.value
 })
@@ -557,6 +567,16 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
               <div v-if="rentalDays !== null">
                 <p class="text-xs text-zinc-500">{{ rentalDays && rentalDays > 1 ? 'Rental Days' : 'Rental Day' }}</p>
                 <p class="text-sm font-medium text-zinc-900">{{ rentalDays }} day{{ rentalDays && rentalDays > 1 ? 's' : '' }}</p>
+              </div>
+
+              <div v-if="subtotal !== null">
+                <p class="text-xs text-zinc-500">Subtotal</p>
+                <p class="text-sm font-medium text-zinc-900">₱{{ subtotal.toLocaleString('en-PH') }}</p>
+              </div>
+
+              <div v-if="discountAmount !== null && discountAmount > 0" class="text-green-700">
+                <p class="text-xs text-zinc-500">Discount ({{ discountPercent }}%)</p>
+                <p class="text-sm font-medium">− ₱{{ discountAmount.toLocaleString('en-PH') }}</p>
               </div>
 
               <hr v-if="estimatedTotal !== null" class="border-zinc-200" />

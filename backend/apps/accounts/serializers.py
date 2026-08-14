@@ -12,7 +12,7 @@ class EmailVerificationTokenGenerator:
 
     Uses Django's TimestampSigner so that verification tokens survive
     password changes.  Tokens expire after PASSWORD_RESET_TIMEOUT
-    (default 5 min).
+    (default 15 minutes).
     """
     def __init__(self):
         self.signer = TimestampSigner()

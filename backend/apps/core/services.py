@@ -16,6 +16,69 @@ from apps.core.models import Notification, AuditLog
 logger = logging.getLogger(__name__)
 
 
+def _client_ip(request):
+    """Best-effort client IP for audit logging.
+
+    Only trust X-Forwarded-For when it was explicitly enabled (the app is
+    behind a trusted reverse proxy).  Otherwise an attacker can spoof the
+    header and forge audit-trail source addresses.
+    """
+    trust_proxy = getattr(settings, 'SECURE_PROXY_SSL_HEADER', None)
+    if trust_proxy and request.META.get('HTTP_X_FORWARDED_FOR'):
+        return request.META.get('HTTP_X_FORWARDED_FOR').split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
+def get_effective_discount_policy(vehicle):
+    """Return the discount policy that applies to a vehicle.
+
+    A vehicle's explicit override wins; otherwise the global default policy
+    is used.  Returns None when no policy is configured at all.
+    """
+    from apps.core.models import RentalDiscountPolicy
+
+    if vehicle.discount_policy_id:
+        return vehicle.discount_policy
+    return RentalDiscountPolicy.get_default()
+
+
+def compute_rental_pricing(vehicle, rental_days):
+    """Compute rental pricing with the applicable duration-based discount.
+
+    Returns a dict with:
+        price_per_day      — vehicle base daily rate
+        rental_days        — inclusive rental day count
+        subtotal           — gross price before discount
+        discount_percent   — applied discount percentage
+        discount_amount    — monetary value of the discount
+        estimated_total    — subtotal minus discount
+        discount_policy    — policy name or None
+
+    Amounts are returned as Decimal to preserve exact money math.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    days = max(1, int(rental_days or 1))
+    price_per_day = Decimal(str(vehicle.price_per_day or '0'))
+    subtotal = price_per_day * days
+
+    policy = get_effective_discount_policy(vehicle)
+    percent = policy.discount_percent_for_days(days) if policy else Decimal('0')
+
+    discount_amount = (subtotal * percent / 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    estimated_total = subtotal - discount_amount
+
+    return {
+        'price_per_day': price_per_day,
+        'rental_days': days,
+        'subtotal': subtotal,
+        'discount_percent': percent,
+        'discount_amount': discount_amount,
+        'estimated_total': estimated_total,
+        'discount_policy': policy.name if policy else None,
+    }
+
+
 # ─────────────────────────────────────────────
 #  Notification creation
 # ─────────────────────────────────────────────
@@ -64,11 +127,7 @@ def create_audit_log(*, actor, action, booking=None, payment=None, summary,
     """Create an immutable audit log entry for an admin action."""
     ip = None
     if request:
-        x_forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-        if x_forwarded:
-            ip = x_forwarded.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR', '')
+        ip = _client_ip(request)
 
     return AuditLog.objects.create(
         actor=actor,

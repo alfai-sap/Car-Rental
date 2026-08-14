@@ -10,6 +10,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
 # ── Sentry (error monitoring) ───────────────────────────
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
 if SENTRY_DSN and not DEBUG:
@@ -42,7 +44,6 @@ if not SECRET_KEY:
         'SECRET_KEY environment variable is not set.\n'
         'Copy backend/.env.example to backend/.env and fill in the required values.'
     )
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '').split(',') if host.strip()]
 
 # Django test client uses 'testserver' as the host
@@ -178,6 +179,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 # Upload limits — protect against large request bodies
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
@@ -242,16 +244,15 @@ REST_FRAMEWORK = {
         'user': '2000/minute',
         'login': '5/minute',
         'password_reset': '3/minute',
+        'password_reset_confirm': '3/minute',
         'verification_resend': '3/minute',
+        'verification_confirm': '10/minute',
         'payment_checkout': '5/minute',
         'identity_doc_image': '30/minute',
         'registration': '5/minute',
     },
     'EXCEPTION_HANDLER': 'apps.core.exception_handler.custom_exception_handler',
 }
-
-# Upload size limit — 10 MB (must be set before any file upload handling)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Allow manual payment confirmation (dev/testing only — disable in production)
 ALLOW_MANUAL_PAYMENT_CONFIRM = os.getenv('ALLOW_MANUAL_PAYMENT_CONFIRM', 'False').lower() == 'true'

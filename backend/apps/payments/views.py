@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def payment_gateway_enabled():
-	return (
-		settings.PAYMENT_PROVIDER == 'paymongo'
-		and bool(settings.PAYMONGO_PUBLIC_KEY)
-		and bool(settings.PAYMONGO_SECRET_KEY)
-		and bool(settings.PAYMONGO_WEBHOOK_SECRET)
-	)
+    return (
+        settings.PAYMENT_PROVIDER == 'paymongo'
+        and bool(settings.PAYMONGO_PUBLIC_KEY)
+        and bool(settings.PAYMONGO_SECRET_KEY)
+        and bool(settings.PAYMONGO_WEBHOOK_SECRET)
+    )
 
 
 class PaymentCreateSessionView(APIView):
@@ -66,7 +66,7 @@ class PaymentCreateSessionView(APIView):
                 description = f'Rental: {vehicle_name} ({booking.pickup_date} – {booking.return_date})'
 
                 paymongo_result = create_checkout_session(
-                    amount=float(booking.estimated_total),
+                    amount=booking.estimated_total,
                     currency='PHP',
                     description=description,
                     payment_reference=f'PMT-{booking.booking_number}',
@@ -233,7 +233,8 @@ class PaymentWebhookView(APIView):
 
         # ── 2. Extract event data ──
         event_data = request.data.get('data', {})
-        event_type = event_data.get('attributes', {}).get('type', '')
+        event_attributes = event_data.get('attributes', {})
+        event_type = event_attributes.get('type', '')
         event_id = event_data.get('id', '')
 
         if not event_id:
@@ -245,22 +246,39 @@ class PaymentWebhookView(APIView):
             return Response({'detail': 'Event already processed.'})
 
         # ── 4. Dispatch by event type ──
-        handled_types = {'payment.paid', 'payment.failed', 'payment.expired'}
+        handled_types = {'payment.paid', 'payment.failed', 'payment.expired', 'checkout_session.expired'}
         if event_type not in handled_types:
             logger.info('PayMongo webhook: unhandled event type %s', event_type)
             return Response({'detail': f'Event type {event_type} acknowledged.'})
 
         # ── 5. Find the Payment record via the PayMongo payment ID ──
-        paymongo_payment_id = event_data.get('id', '')
-        payment = Payment.objects.filter(
-            provider_reference=paymongo_payment_id,
-            payment_status=Payment.STATUS_PENDING,
-        ).select_related('booking', 'invoice').first()
+        # The resource is nested under attributes.data.  For payment.* events
+        # it is a Payment object (id prefixed pay_).  For
+        # checkout_session.expired it is the CheckoutSession object (cs_), so
+        # we match via its embedded payments[] IDs instead.
+        resource = event_attributes.get('data', {})
+
+        if event_type == 'checkout_session.expired':
+            payment_ids = [
+                p.get('id')
+                for p in resource.get('payments', [])
+                if p.get('id')
+            ]
+            payment = Payment.objects.filter(
+                provider_reference__in=payment_ids,
+                payment_status=Payment.STATUS_PENDING,
+            ).select_related('booking', 'invoice').first()
+        else:
+            paymongo_payment_id = resource.get('id', '')
+            payment = Payment.objects.filter(
+                provider_reference=paymongo_payment_id,
+                payment_status=Payment.STATUS_PENDING,
+            ).select_related('booking', 'invoice').first()
 
         if not payment:
             logger.warning(
-                'PayMongo webhook: no pending payment found for reference %s',
-                paymongo_payment_id,
+                'PayMongo webhook: no pending payment found for event %s (%s)',
+                event_type, event_id,
             )
             return Response(
                 {'detail': 'No matching pending payment found.'},
@@ -272,28 +290,50 @@ class PaymentWebhookView(APIView):
         payment.webhook_event_id = event_id
 
         if event_type == 'payment.paid':
+            # ── Amount/currency verification ──
+            resource_attributes = resource.get('attributes', {})
+            paid_amount_cents = resource_attributes.get('amount')
+            paid_currency = (resource_attributes.get('currency') or '').upper()
+            expected_cents = None
+            if payment.invoice:
+                expected_cents = int(payment.invoice.total * 100)
+
+            if paid_currency != 'PHP' or (expected_cents is not None and paid_amount_cents != expected_cents):
+                logger.error(
+                    'PayMongo webhook: amount mismatch for payment %s (expected %s PHP, got %s %s)',
+                    payment.payment_number, expected_cents, paid_amount_cents, paid_currency,
+                )
+                return Response(
+                    {'detail': 'Payment amount does not match the invoice.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             payment.payment_status = Payment.STATUS_PAID
             payment.paid_at = timezone.now()
-            payment.payment_method = (
-                event_data.get('attributes', {})
-                .get('payments', [{}])[0]
-                .get('source', {})
-                .get('type', '')
-            )
+            payment.payment_method = resource_attributes.get('source', {}).get('type', '')
 
-            with transaction.atomic():
-                payment.save()
-                booking.status = 'confirmed'
-                if booking.vehicle_unit:
-                    booking.vehicle_unit.status = 'booked'
-                    booking.vehicle_unit.save()
-                booking.save()
-                if payment.invoice:
-                    payment.invoice.invoice_status = Invoice.STATUS_PAID
-                    payment.invoice.save()
+            try:
+                with transaction.atomic():
+                    payment.save()
+                    if payment.invoice:
+                        payment.invoice.invoice_status = Invoice.STATUS_PAID
+                        payment.invoice.save()
+                    # Only advance the booking if it is still awaiting payment.
+                    # A customer could complete payment after the booking was
+                    # cancelled/rejected; never resurrect it.
+                    if booking.status == 'awaiting_payment':
+                        booking.status = 'confirmed'
+                        if booking.vehicle_unit:
+                            booking.vehicle_unit.status = 'booked'
+                            booking.vehicle_unit.save()
+                        booking.save()
+            except IntegrityError:
+                logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
+                return Response({'detail': 'Event already processed.'})
 
             notify.notify_payment_successful(booking)
-            notify.notify_booking_confirmed(booking)
+            if booking.status == 'confirmed':
+                notify.notify_booking_confirmed(booking)
             logger.info(
                 'PayMongo webhook: payment %s confirmed for booking %s',
                 payment.payment_number, booking.booking_number,
@@ -301,10 +341,14 @@ class PaymentWebhookView(APIView):
             return Response({'detail': 'Payment processed successfully.'})
 
         elif event_type == 'payment.failed':
-            with transaction.atomic():
-                payment.payment_status = Payment.STATUS_FAILED
-                payment.save()
-                # Booking stays in awaiting_payment so customer can retry
+            try:
+                with transaction.atomic():
+                    payment.payment_status = Payment.STATUS_FAILED
+                    payment.save()
+                    # Booking stays in awaiting_payment so customer can retry
+            except IntegrityError:
+                logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
+                return Response({'detail': 'Event already processed.'})
 
             notify.notify_payment_failed(booking)
             logger.info(
@@ -313,12 +357,16 @@ class PaymentWebhookView(APIView):
             )
             return Response({'detail': 'Payment failure recorded.'})
 
-        elif event_type == 'payment.expired':
-            with transaction.atomic():
-                payment.payment_status = Payment.STATUS_EXPIRED
-                payment.save()
-                # Booking stays in awaiting_payment — customer can request a
-                # new payment attempt via the request-repayment endpoint.
+        elif event_type in ('payment.expired', 'checkout_session.expired'):
+            try:
+                with transaction.atomic():
+                    payment.payment_status = Payment.STATUS_EXPIRED
+                    payment.save()
+                    # Booking stays in awaiting_payment — customer can request a
+                    # new payment attempt via the request-repayment endpoint.
+            except IntegrityError:
+                logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
+                return Response({'detail': 'Event already processed.'})
 
             notify.notify_payment_expired(booking)
             logger.info(

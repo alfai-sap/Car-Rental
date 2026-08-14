@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.core.exception_handler import format_throttle_message
+
 from .models import User, IdentityDocument
 from .serializers import (
     RegisterSerializer,
@@ -243,32 +245,21 @@ class LoginView(views.APIView):
         user = User.objects.filter(email=email).first()
 
         # ── Account-level brute-force lockout check ──
-        # Even if the account exists and is locked, we return the same
-        # generic "Invalid email or password" to prevent user-enumeration.
-        # The 'code' field lets the frontend show a helpful hint without
-        # leaking which accounts exist.
+        # A locked account receives the exact same throttling-style message
+        # as an IP-level throttle, so an attacker cannot distinguish an
+        # existing (locked) account from a rate-limited request.
         if user and user.is_locked_out():
             logger.warning(
                 'Login attempt for locked account: %s (locked until %s)',
                 email, user.locked_until,
             )
+            remaining = int((user.locked_until - timezone.now()).total_seconds())
             return Response(
-                {'detail': 'Invalid email or password.', 'code': 'account_locked'},
-                status=status.HTTP_401_UNAUTHORIZED,
+                {'detail': format_throttle_message(remaining)},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         if user and user.check_password(password):
-            if not user.is_verified and not user.is_staff:
-                # Return 401 with code=unverified so the frontend can show
-                # helpful instructions without leaking to attackers (the
-                # HTTP status and generic message remain identical).
-                logger.info(
-                    'Login attempt for unverified account: %s', email,
-                )
-                return Response(
-                    {'detail': 'Invalid email or password.', 'code': 'email_unverified'},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
             # Successful login — clear any stale lockout state
             user.clear_failed_attempts()
             tokens = get_tokens_for_user(user)
@@ -282,6 +273,12 @@ class LoginView(views.APIView):
         # Failed login — record the attempt if the account exists.
         # We do NOT record attempts for nonexistent emails to prevent
         # attackers from locking arbitrary accounts via enumeration.
+        #
+        # NOTE: unverified accounts are intentionally allowed to reach this
+        # point with the same generic response as any other bad credential.
+        # The frontend always surfaces the verification hint banner, and the
+        # dedicated resend-verification endpoint is anti-enumerating, so no
+        # per-account signal is leaked here.
         if user:
             user.record_failed_login()
             logger.info(
@@ -294,6 +291,7 @@ class LoginView(views.APIView):
 
 class VerifyEmailView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'verification_confirm'
 
     def post(self, request):
         serializer = VerifyEmailSerializer(data=request.data)
@@ -508,7 +506,9 @@ class PasswordResetRequestView(views.APIView):
         email = serializer.validated_data['email']
         user = User.objects.filter(email=email).first()
 
-        if user:
+        # Google-authenticated accounts have no application password, so no
+        # reset link is sent.  The response stays generic for anti-enumeration.
+        if user and user.auth_method != User.AUTH_METHOD_GOOGLE:
             token = account_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
@@ -546,6 +546,7 @@ class PasswordResetRequestView(views.APIView):
 
 class PasswordResetConfirmView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset_confirm'
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -554,6 +555,16 @@ class PasswordResetConfirmView(views.APIView):
 
         data = serializer.validated_data
         user = data['user']
+
+        # Google-authenticated accounts have no application password, so a
+        # password reset must not silently add one.  They authenticate via
+        # Google only (mirrors PasswordChangeView).
+        if user.auth_method == User.AUTH_METHOD_GOOGLE:
+            return Response(
+                {'detail': 'This account uses Google Sign-In and cannot reset a password here.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         user.set_password(data['password'])
         user.save()
 

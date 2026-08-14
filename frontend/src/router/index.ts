@@ -44,6 +44,12 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/resend-verification',
+      name: 'resend-verification',
+      component: () => import('@/views/ResendVerificationView.vue'),
+      meta: { guestOnly: true },
+    },
+    {
       path: '/reset-password/:uid/:token',
       name: 'reset-password',
       component: () => import('@/views/ResetPasswordView.vue'),
@@ -105,6 +111,12 @@ const router = createRouter({
       path: '/admin/audit-logs',
       name: 'admin-audit-logs',
       component: () => import('@/views/AdminAuditLogView.vue'),
+      meta: { requiresAuth: true, requiresStaff: true },
+    },
+    {
+      path: '/admin/settings',
+      name: 'admin-settings',
+      component: () => import('@/views/AdminSettingsView.vue'),
       meta: { requiresAuth: true, requiresStaff: true },
     },
     {

@@ -22,6 +22,8 @@ class BookingSerializer(serializers.ModelSerializer):
     assigned_by = serializers.SerializerMethodField(read_only=True)
     return_unit_status = serializers.CharField(read_only=True)
     return_time_actual = serializers.DateTimeField(read_only=True)
+    discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    discount_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Booking
@@ -31,14 +33,16 @@ class BookingSerializer(serializers.ModelSerializer):
             'vehicle', 'vehicle_name', 'vehicle_images', 'vehicle_unit',
             'vehicle_unit_plate', 'vehicle_unit_status', 'assigned_by',
             'pickup_date', 'return_date', 'pickup_time', 'return_time',
-            'rental_days', 'subtotal', 'estimated_total', 'status', 'status_display',
+            'rental_days', 'subtotal', 'discount_percent', 'discount_amount',
+            'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
             'handover_time', 'return_time_actual', 'return_unit_status',
             'repayment_requested', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'booking_number', 'customer', 'vehicle_unit',
-            'rental_days', 'subtotal', 'estimated_total', 'status',
+            'rental_days', 'subtotal', 'discount_percent', 'discount_amount',
+            'estimated_total', 'status',
             'rejection_reason', 'cancellation_reason', 'created_at',
             'updated_at', 'handover_time', 'repayment_requested',
         ]

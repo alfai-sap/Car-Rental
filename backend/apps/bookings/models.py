@@ -49,6 +49,14 @@ class Booking(models.Model):
     return_time = models.TimeField(default='17:00')
     rental_days = models.PositiveSmallIntegerField()
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0,
+        help_text='Discount percentage applied to this booking (snapshot at booking time).',
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text='Monetary discount applied to this booking (snapshot at booking time).',
+    )
     estimated_total = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
     special_request = models.TextField(blank=True)
@@ -90,9 +98,14 @@ class Booking(models.Model):
             if self.rental_days is None or not self.rental_days:
                 self.rental_days = max(1, (self.return_date - self.pickup_date).days + 1)
             if self.subtotal is None:
-                self.subtotal = self.vehicle.price_per_day * self.rental_days
-            if self.estimated_total is None:
-                self.estimated_total = self.subtotal  # deposits/taxes added in Phase 5
+                from apps.core.services import compute_rental_pricing
+
+                pricing = compute_rental_pricing(self.vehicle, self.rental_days)
+                self.subtotal = pricing['subtotal']
+                self.discount_percent = pricing['discount_percent']
+                self.discount_amount = pricing['discount_amount']
+                if self.estimated_total is None:
+                    self.estimated_total = pricing['estimated_total']
         super().save(*args, **kwargs)
 
     @staticmethod

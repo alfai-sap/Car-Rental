@@ -1,5 +1,5 @@
 from django.contrib import admin
-from apps.core.models import Notification, AuditLog
+from apps.core.models import Notification, AuditLog, RentalDiscountPolicy, DiscountTier
 
 
 @admin.register(Notification)
@@ -9,6 +9,20 @@ class NotificationAdmin(admin.ModelAdmin):
     search_fields = ['user__email', 'title', 'message']
     readonly_fields = ['created_at']
     ordering = ['-created_at']
+
+
+class DiscountTierInline(admin.TabularInline):
+    model = DiscountTier
+    extra = 1
+    min_num = 1
+
+
+@admin.register(RentalDiscountPolicy)
+class RentalDiscountPolicyAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_default', 'created_at', 'updated_at']
+    list_filter = ['is_default']
+    search_fields = ['name']
+    inlines = [DiscountTierInline]
 
 
 @admin.register(AuditLog)

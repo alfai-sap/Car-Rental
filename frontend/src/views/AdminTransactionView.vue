@@ -65,6 +65,8 @@ interface Booking {
   return_time: string
   rental_days: number
   subtotal: string
+  discount_percent: string
+  discount_amount: string
   estimated_total: string
   status: string
   status_display: string
@@ -580,6 +582,10 @@ onMounted(fetchBooking)
                 <div class="flex justify-between text-sm">
                   <span class="text-zinc-500">Subtotal</span>
                   <span class="text-zinc-900">₱{{ Number(booking.subtotal).toLocaleString('en-PH') }}</span>
+                </div>
+                <div v-if="Number(booking.discount_amount) > 0" class="flex justify-between text-sm text-green-700">
+                  <span>Discount ({{ Number(booking.discount_percent) }}%)</span>
+                  <span>− ₱{{ Number(booking.discount_amount).toLocaleString('en-PH') }}</span>
                 </div>
                 <hr class="border-zinc-200" />
                 <div class="flex justify-between text-sm font-semibold">

@@ -88,21 +88,47 @@ function formatPrice(price: string): string {
   return `₱${Number(price).toLocaleString('en-PH')}/day`
 }
 
+// Global discount policy tiers (min_days → percent).  Fetched once on mount.
+interface DiscountTier {
+  min_days: number
+  discount_percent: string
+}
+const discountTiers = ref<DiscountTier[]>([])
+
+function discountPercentForDays(days: number): number {
+  const applicable = discountTiers.value.filter(t => t.min_days <= days)
+  if (applicable.length === 0) return 0
+  const best = applicable.reduce((a, b) => (b.min_days > a.min_days ? b : a))
+  return Number(best.discount_percent)
+}
+
+function discountedRateForDays(days: number): number {
+  const daily = Number(vehicle.value?.price_per_day || 0)
+  const percent = discountPercentForDays(days)
+  return daily * days * (1 - percent / 100)
+}
+
 const weeklyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${(Number(vehicle.value.price_per_day) * 7).toLocaleString('en-PH')}/week`
+  return `₱${discountedRateForDays(7).toLocaleString('en-PH')}/week`
 })
 
 const monthlyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${(Number(vehicle.value.price_per_day) * 30).toLocaleString('en-PH')}/month`
+  return `₱${discountedRateForDays(30).toLocaleString('en-PH')}/month`
 })
 
 onMounted(async () => {
   try {
     const id = route.params.id
-    const response = await api.get(`/vehicles/${id}/`)
+    const [response, policyRes] = await Promise.all([
+      api.get(`/vehicles/${id}/`),
+      api.get('/discount-policy/'),
+    ])
     vehicle.value = response.data
+    if (policyRes.data?.configured) {
+      discountTiers.value = policyRes.data.tiers
+    }
 
     // Check if user has an existing booking for this vehicle
     if (auth.isAuthenticated) {
