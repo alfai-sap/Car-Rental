@@ -98,25 +98,20 @@ class PaymentCreateSessionView(APIView):
                 defaults={
                     'subtotal': booking.subtotal,
                     'additional_charges': 0,
-                    'discount': 0,
+                    'discount': booking.discount_amount,
                     'total': booking.estimated_total,
                     'invoice_status': Invoice.STATUS_PENDING,
                     'due_date': timezone.now().date() + timedelta(days=3),
                 },
             )
-            # Sync invoice subtotal to booking on re-attempt, but ONLY when the
-            # invoice has no additional charges or discount applied (e.g. late
-            # fees, extensions).  Otherwise we would silently erase adjustments
-            # that were manually added by an administrator.
-            if invoice.invoice_status != Invoice.STATUS_PAID:
-                has_adjustments = (
-                    (invoice.additional_charges or 0) != 0
-                    or (invoice.discount or 0) != 0
-                )
-                if not has_adjustments and invoice.subtotal != booking.subtotal:
-                    invoice.subtotal = booking.subtotal
-                    invoice.total = booking.subtotal
-                    invoice.save(update_fields=['subtotal', 'total', 'updated_at'])
+            # Keep the rental discount/subtotal in sync with the booking's
+            # immutable pricing snapshot on re-attempts, while preserving any
+            # admin-added additional charges.  Invoice.save() recomputes
+            # `total = subtotal + additional_charges - discount`.
+            if invoice.invoice_status != Invoice.STATUS_PAID and (invoice.additional_charges or 0) == 0:
+                invoice.subtotal = booking.subtotal
+                invoice.discount = booking.discount_amount
+                invoice.save(update_fields=['subtotal', 'discount', 'total', 'updated_at'])
 
             payment = Payment.objects.create(
                 booking=booking,

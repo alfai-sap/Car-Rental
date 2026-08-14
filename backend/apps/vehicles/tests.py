@@ -69,6 +69,39 @@ class VehicleAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['make'], 'Toyota')
 
+    def test_vehicle_detail_includes_effective_pricing(self):
+        """The detail serializer must surface the effective discount policy and
+        server-computed weekly/monthly totals (honouring any override)."""
+        from apps.core.models import RentalDiscountPolicy, DiscountTier
+
+        policy = RentalDiscountPolicy.objects.create(name='Global', is_default=True)
+        DiscountTier.objects.create(policy=policy, min_days=1, discount_percent=0)
+        DiscountTier.objects.create(policy=policy, min_days=7, discount_percent=10)
+        DiscountTier.objects.create(policy=policy, min_days=30, discount_percent=20)
+
+        response = self.client.get(f'/api/vehicles/{self.vehicle.pk}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['discount_policy']['name'], 'Global')
+        # 2500/day * 7 = 17500 → 10% off = 15750
+        self.assertEqual(response.data['weekly_price'], '15750.00')
+        # 2500/day * 30 = 75000 → 20% off = 60000
+        self.assertEqual(response.data['monthly_price'], '60000.00')
+
+    def test_vehicle_detail_override_pricing(self):
+        from apps.core.models import RentalDiscountPolicy, DiscountTier
+
+        RentalDiscountPolicy.objects.create(name='Global', is_default=True)
+        override = RentalDiscountPolicy.objects.create(name='Override')
+        DiscountTier.objects.create(policy=override, min_days=1, discount_percent=50)
+        self.vehicle.discount_policy = override
+        self.vehicle.save()
+
+        response = self.client.get(f'/api/vehicles/{self.vehicle.pk}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['discount_policy']['name'], 'Override')
+        self.assertEqual(response.data['weekly_price'], '8750.00')   # 17500 * 0.5
+        self.assertEqual(response.data['monthly_price'], '37500.00')  # 75000 * 0.5
+
     def test_create_vehicle_admin_only(self):
         response = self.client.post('/api/vehicles/', {
             'make': 'Honda', 'model': 'Civic', 'year': 2024,

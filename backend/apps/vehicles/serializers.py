@@ -79,6 +79,9 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
     images = VehicleImageSerializer(many=True, read_only=True)
     total_units = serializers.SerializerMethodField()
     available_units = serializers.SerializerMethodField()
+    discount_policy = serializers.SerializerMethodField()
+    weekly_price = serializers.SerializerMethodField()
+    monthly_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
@@ -86,6 +89,7 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
             'id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'description', 'images',
             'total_units', 'available_units',
+            'discount_policy', 'weekly_price', 'monthly_price',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'images']
@@ -95,6 +99,32 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
 
     def get_available_units(self, obj):
         return obj.units.filter(status='available').count()
+
+    def get_discount_policy(self, obj):
+        """Return the vehicle's effective discount policy (override or global)."""
+        from apps.core.services import get_effective_discount_policy
+
+        policy = get_effective_discount_policy(obj)
+        if not policy:
+            return None
+        return {
+            'id': policy.id,
+            'name': policy.name,
+            'tiers': [
+                {'min_days': tier.min_days, 'discount_percent': str(tier.discount_percent)}
+                for tier in policy.tiers.all()
+            ],
+        }
+
+    def get_weekly_price(self, obj):
+        from apps.core.services import compute_rental_pricing
+
+        return str(compute_rental_pricing(obj, 7)['estimated_total'])
+
+    def get_monthly_price(self, obj):
+        from apps.core.services import compute_rental_pricing
+
+        return str(compute_rental_pricing(obj, 30)['estimated_total'])
 
 
 class VehicleWriteSerializer(serializers.ModelSerializer):

@@ -65,6 +65,26 @@ class PaymentAPITests(TestCase):
 		self.assertTrue(Invoice.objects.filter(booking=self.booking).exists())
 		self.assertEqual(Payment.objects.filter(booking=self.booking).count(), 1)
 
+	def test_invoice_records_booking_discount(self):
+		"""Regression: the invoice must carry the booking's discount snapshot,
+		not a hardcoded zero, so the customer is charged the discounted total."""
+		self.booking.discount_amount = 450
+		self.booking.discount_percent = 10
+		self.booking.estimated_total = 4050
+		self.booking.save(update_fields=['discount_amount', 'discount_percent', 'estimated_total', 'updated_at'])
+
+		self._login(self.customer)
+		response = self.client.post('/api/payments/create-session/', {'booking_id': self.booking.id}, format='json')
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+		invoice = Invoice.objects.get(booking=self.booking)
+		self.assertEqual(invoice.subtotal, 4500)
+		self.assertEqual(invoice.discount, 450)
+		self.assertEqual(invoice.total, 4050)
+
+		payment = Payment.objects.filter(booking=self.booking).latest('id')
+		self.assertEqual(payment.amount, 4050)
+
 	def test_payment_history_restricted_to_owner(self):
 		self._login(self.customer)
 		self.client.post('/api/payments/create-session/', {'booking_id': self.booking.id}, format='json')

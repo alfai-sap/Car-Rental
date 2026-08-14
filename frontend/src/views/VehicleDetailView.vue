@@ -30,6 +30,13 @@ interface Vehicle {
   images: VehicleImage[]
   total_units: number
   available_units: number
+  discount_policy: {
+    id: number
+    name: string
+    tiers: Array<{ min_days: number; discount_percent: string }>
+  } | null
+  weekly_price: string
+  monthly_price: string
 }
 
 const route = useRoute()
@@ -88,47 +95,39 @@ function formatPrice(price: string): string {
   return `₱${Number(price).toLocaleString('en-PH')}/day`
 }
 
-// Global discount policy tiers (min_days → percent).  Fetched once on mount.
-interface DiscountTier {
-  min_days: number
-  discount_percent: string
-}
-const discountTiers = ref<DiscountTier[]>([])
-
-function discountPercentForDays(days: number): number {
-  const applicable = discountTiers.value.filter(t => t.min_days <= days)
-  if (applicable.length === 0) return 0
-  const best = applicable.reduce((a, b) => (b.min_days > a.min_days ? b : a))
-  return Number(best.discount_percent)
+function formatAmount(amount: string): string {
+  return `₱${Number(amount).toLocaleString('en-PH')}`
 }
 
-function discountedRateForDays(days: number): number {
-  const daily = Number(vehicle.value?.price_per_day || 0)
-  const percent = discountPercentForDays(days)
-  return daily * days * (1 - percent / 100)
-}
+// Discount tiers come from the vehicle detail response (server-computed via
+// the vehicle's effective policy).  Used only for the tier summary text.
+const discountPercentForDays = computed(() => {
+  const tiers = vehicle.value?.discount_policy?.tiers ?? []
+  return (days: number): number => {
+    const applicable = tiers.filter(t => t.min_days <= days)
+    if (applicable.length === 0) return 0
+    return Number(applicable.reduce((a, b) => (b.min_days > a.min_days ? b : a)).discount_percent)
+  }
+})
+
+const weeklyDiscountPercent = computed(() => discountPercentForDays.value(7))
+const monthlyDiscountPercent = computed(() => discountPercentForDays.value(30))
 
 const weeklyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${discountedRateForDays(7).toLocaleString('en-PH')}/week`
+  return formatAmount(vehicle.value.weekly_price)
 })
 
 const monthlyPrice = computed(() => {
   if (!vehicle.value) return ''
-  return `₱${discountedRateForDays(30).toLocaleString('en-PH')}/month`
+  return formatAmount(vehicle.value.monthly_price)
 })
 
 onMounted(async () => {
   try {
     const id = route.params.id
-    const [response, policyRes] = await Promise.all([
-      api.get(`/vehicles/${id}/`),
-      api.get('/discount-policy/'),
-    ])
+    const response = await api.get(`/vehicles/${id}/`)
     vehicle.value = response.data
-    if (policyRes.data?.configured) {
-      discountTiers.value = policyRes.data.tiers
-    }
 
     // Check if user has an existing booking for this vehicle
     if (auth.isAuthenticated) {
@@ -237,27 +236,37 @@ onMounted(async () => {
           </div>
 
           <!-- Booking Sidebar -->
-          <div class="rounded-lg border border-zinc-200 bg-white p-6 h-fit space-y-4">
+          <div class="rounded-lg border border-zinc-200 bg-white p-6 h-fit space-y-5">
+            <!-- Price per day (primary) -->
             <div>
-              <p class="text-2xl font-bold text-zinc-900">{{ formatPrice(vehicle.price_per_day) }}</p>
-              <div class="flex gap-3 mt-2">
-                <div class="rounded-md bg-zinc-50 border border-zinc-100 px-2.5 py-1.5">
-                  <p class="text-xs text-zinc-500">Weekly</p>
-                  <p class="text-sm font-medium text-zinc-800">{{ weeklyPrice }}</p>
-                </div>
-                <div class="rounded-md bg-zinc-50 border border-zinc-100 px-2.5 py-1.5">
-                  <p class="text-xs text-zinc-500">Monthly</p>
-                  <p class="text-sm font-medium text-zinc-800">{{ monthlyPrice }}</p>
-                </div>
-              </div>
-              <p class="text-xs text-zinc-500 mt-3">Free cancellation up to 24 hours before pickup</p>
+              
+              <p class="text-3xl font-bold text-zinc-900 tracking-tight">{{ formatPrice(vehicle.price_per_day) }}</p>
             </div>
 
+            <!-- Duration pricing -->
+            <div class="grid grid-cols-2 gap-3">
+              <div class="rounded-md border border-zinc-300 p-3">
+                <p class="text-xs text-zinc-500 mb-1">Weekly (7 days)</p>
+                <p class="text-base font-semibold text-zinc-900">{{ weeklyPrice }}</p>
+                <p v-if="weeklyDiscountPercent > 0" class="text-xs text-green-700 mt-1">Save {{ weeklyDiscountPercent }}%</p>
+              </div>
+              <div class="rounded-md border border-zinc-300 p-3">
+                <p class="text-xs text-zinc-500 mb-1">Monthly (30 days)</p>
+                <p class="text-base font-semibold text-zinc-900">{{ monthlyPrice }}</p>
+                <p v-if="monthlyDiscountPercent > 0" class="text-xs text-green-700 mt-1">Save {{ monthlyDiscountPercent }}%</p>
+              </div>
+            </div>
+
+            <!-- Discount reminder -->
+            <p class="text-xs text-zinc-400 leading-relaxed">
+              Discount policies are subject to change and are applied at booking time.
+            </p>
+
             <!-- Unit Availability -->
-            <div class="rounded-md bg-zinc-50 border border-zinc-100 p-3">
+            <div class="rounded-md border border-zinc-300 p-3">
               <p class="text-xs text-zinc-500 mb-1">Availability</p>
               <p class="text-sm font-medium text-zinc-900">
-                {{ vehicle.available_units }} of {{ vehicle.total_units }} available
+                {{ vehicle.available_units }} of {{ vehicle.total_units }} units available
               </p>
             </div>
 
