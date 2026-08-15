@@ -27,6 +27,8 @@ class BookingSerializer(serializers.ModelSerializer):
     return_time_actual = serializers.DateTimeField(read_only=True)
     discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
     discount_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    payments = serializers.SerializerMethodField(read_only=True)
+    invoice = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Booking
@@ -40,6 +42,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'estimated_total', 'status', 'status_display',
             'special_request', 'rejection_reason', 'cancellation_reason',
             'handover_time', 'return_time_actual', 'return_unit_status',
+            'payments', 'invoice',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
@@ -62,6 +65,38 @@ class BookingSerializer(serializers.ModelSerializer):
         if last and last.changed_by:
             return f"{last.changed_by.first_name} {last.changed_by.last_name}"
         return None
+
+    def get_payments(self, obj):
+        """Return the payment records for this booking (status, amount, etc.)."""
+        payments = obj.payments.order_by('-created_at')
+        return [
+            {
+                'id': p.id,
+                'payment_number': p.payment_number,
+                'amount': str(p.amount),
+                'currency': p.currency,
+                'payment_status': p.payment_status,
+                'payment_method': p.payment_method,
+                'paid_at': p.paid_at,
+                'created_at': p.created_at,
+            }
+            for p in payments
+        ]
+
+    def get_invoice(self, obj):
+        """Return the invoice summary for this booking, if any."""
+        invoice = getattr(obj, 'invoice', None)
+        if not invoice:
+            return None
+        return {
+            'id': invoice.id,
+            'invoice_number': invoice.invoice_number,
+            'subtotal': str(invoice.subtotal),
+            'discount': str(invoice.discount),
+            'total': str(invoice.total),
+            'invoice_status': invoice.invoice_status,
+            'due_date': invoice.due_date,
+        }
 
     def get_customer_name(self, obj):
         return f"{obj.customer.first_name} {obj.customer.last_name}"

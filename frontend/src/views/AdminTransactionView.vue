@@ -73,6 +73,8 @@ interface Booking {
   special_request: string
   rejection_reason: string
   return_unit_status: string
+  payments: PaymentRecord[]
+  invoice: InvoiceRecord | null
   created_at: string
   updated_at: string
 }
@@ -81,6 +83,27 @@ interface UnitOption {
   id: number
   plate_number: string
   status: string
+}
+
+interface PaymentRecord {
+  id: number
+  payment_number: string
+  amount: string
+  currency: string
+  payment_status: string
+  payment_method: string
+  paid_at: string | null
+  created_at: string
+}
+
+interface InvoiceRecord {
+  id: number
+  invoice_number: string
+  subtotal: string
+  discount: string
+  total: string
+  invoice_status: string
+  due_date: string | null
 }
 
 interface AssignmentEntry {
@@ -331,6 +354,16 @@ async function fetchBooking() {
   } finally {
     loading.value = false
   }
+}
+
+async function checkPaymentStatus() {
+  if (!booking.value) return
+  processing.value = true
+  try {
+    const response = await api.post(`/bookings/${booking.value.id}/check-payment/`)
+    booking.value = response.data
+  } catch { /* keep current state on failure */ }
+  finally { processing.value = false }
 }
 
 const currentIdx = computed(() => booking.value ? currentStepIndex(booking.value.status) : 0)
@@ -596,8 +629,92 @@ onMounted(fetchBooking)
             </div>
           </div>
 
-          <!-- Right: Admin Actions -->
-          <div>
+          <!-- Right: Payment Details + Admin Actions -->
+          <div class="space-y-6">
+            <!-- Payment Details -->
+            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-3">
+              <h2 class="text-sm font-semibold text-zinc-900">Payment Details</h2>
+
+              <div v-if="booking.invoice || (booking.payments && booking.payments.length > 0)" class="rounded-md border border-zinc-200 overflow-hidden">
+                <!-- Receipt header -->
+                <div class="bg-zinc-50 border-b border-zinc-200 px-4 py-3">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold text-zinc-900 uppercase tracking-wider">Receipt</p>
+                    <span v-if="booking.invoice" class="text-xs font-medium" :class="{
+                      'text-green-700': booking.invoice.invoice_status === 'paid',
+                      'text-amber-600': booking.invoice.invoice_status === 'pending',
+                      'text-zinc-500': !['paid', 'pending'].includes(booking.invoice.invoice_status),
+                    }">{{ booking.invoice.invoice_status }}</span>
+                  </div>
+                  <p v-if="booking.invoice" class="text-[11px] text-zinc-500 mt-0.5 font-mono">{{ booking.invoice.invoice_number }}</p>
+                </div>
+
+                <!-- Receipt body -->
+                <div class="px-4 py-3 space-y-2">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Booking</span>
+                    <span class="text-zinc-900 font-mono">{{ booking.booking_number }}</span>
+                  </div>
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Customer</span>
+                    <span class="text-zinc-900 text-right">{{ booking.customer_name }}</span>
+                  </div>
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Vehicle</span>
+                    <span class="text-zinc-900 text-right">{{ booking.vehicle_name }}</span>
+                  </div>
+                  <div v-if="booking.invoice?.due_date" class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Due Date</span>
+                    <span class="text-zinc-900">{{ formatDate(booking.invoice.due_date) }}</span>
+                  </div>
+
+                  <hr class="border-dashed border-zinc-200" />
+
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Subtotal</span>
+                    <span class="text-zinc-900">₱{{ Number(booking.invoice?.subtotal ?? booking.subtotal).toLocaleString('en-PH') }}</span>
+                  </div>
+                  <div v-if="Number(booking.invoice?.discount ?? booking.discount_amount) > 0" class="flex justify-between text-xs text-green-700">
+                    <span>Discount</span>
+                    <span>− ₱{{ Number(booking.invoice?.discount ?? booking.discount_amount).toLocaleString('en-PH') }}</span>
+                  </div>
+
+                  <hr class="border-dashed border-zinc-200" />
+
+                  <div class="flex justify-between text-sm font-semibold">
+                    <span class="text-zinc-900">Total Amount</span>
+                    <span class="text-zinc-900">₱{{ Number(booking.invoice?.total ?? booking.estimated_total).toLocaleString('en-PH') }}</span>
+                  </div>
+
+                  <!-- Per-payment entries -->
+                  <template v-if="booking.payments && booking.payments.length > 0">
+                    <hr class="border-dashed border-zinc-200" />
+                    <div v-for="p in booking.payments" :key="p.id" class="space-y-1">
+                      <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500 font-mono">{{ p.payment_number }}</span>
+                        <span class="text-zinc-900 font-medium">₱{{ Number(p.amount).toLocaleString('en-PH') }}</span>
+                      </div>
+                      <div class="flex justify-between text-xs">
+                        <span class="text-zinc-400">{{ p.payment_method || '—' }}</span>
+                        <span class="text-xs font-medium" :class="{
+                          'text-green-700': p.payment_status === 'paid',
+                          'text-amber-600': p.payment_status === 'pending',
+                          'text-red-600': ['failed', 'expired', 'cancelled'].includes(p.payment_status),
+                          'text-zinc-500': !['paid', 'pending', 'failed', 'expired', 'cancelled'].includes(p.payment_status),
+                        }">{{ p.payment_status }}</span>
+                      </div>
+                      <p v-if="p.paid_at" class="text-[11px] text-zinc-400 text-right">Paid {{ formatDateTime(p.paid_at) }}</p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div v-if="!booking.payments?.length && !booking.invoice" class="text-xs text-zinc-400 text-center py-2">
+                No payment records yet.
+              </div>
+            </div>
+
+            <!-- Actions -->
             <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
               <h2 class="text-sm font-semibold text-zinc-900">Actions</h2>
 
@@ -636,6 +753,9 @@ onMounted(fetchBooking)
                 <p class="text-xs text-zinc-400 text-center">
                   Awaiting payment confirmation from the gateway.
                 </p>
+                <Button variant="ghost" size="sm" class="w-full text-xs" :disabled="processing" @click="checkPaymentStatus">
+                  {{ processing ? 'Checking...' : 'Refresh Payment Status' }}
+                </Button>
               </template>
 
               <!-- Confirmed / Waiting for Pickup: Assign Unit + Mark Active -->

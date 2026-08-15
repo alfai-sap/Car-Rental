@@ -92,6 +92,76 @@ def finalize_paid_payment(payment, *, amount_cents, currency, payment_method='',
     return booking
 
 
+def reconcile_payment(payment):
+    """Reconcile a single pending payment against the gateway.
+
+    Used by both the ``reconcile_payments`` command and the booking
+    ``check-payment`` action so the customer/admin can force a refresh of a
+    booking whose webhook was missed.  Resolves via ``provider_reference``
+    when present, otherwise via the checkout session's embedded payments.
+
+    Returns the finalised booking on a successful paid transition, or None
+    when there is nothing to do (still pending / failed / expired / error).
+    """
+    from apps.payments.paymongo import (
+        PayMongoError,
+        retrieve_checkout_session,
+        retrieve_payment,
+    )
+
+    payment_attrs = None
+    if payment.provider_reference:
+        try:
+            payment_attrs = retrieve_payment(payment.provider_reference)
+        except PayMongoError as exc:
+            logger.warning('reconcile_payment %s: retrieval failed (%s)', payment.payment_number, exc)
+            return None
+    elif payment.checkout_session_id:
+        try:
+            session_attrs = retrieve_checkout_session(payment.checkout_session_id)
+        except PayMongoError as exc:
+            logger.warning('reconcile_payment %s: checkout session retrieval failed (%s)', payment.payment_number, exc)
+            return None
+
+        session_payments = session_attrs.get('payments', []) or []
+        gateway_payment = session_payments[0] if session_payments else None
+        if gateway_payment:
+            gateway_id = gateway_payment.get('id', '')
+            if gateway_id and not payment.provider_reference:
+                payment.provider_reference = gateway_id
+                payment.save(update_fields=['provider_reference', 'updated_at'])
+            payment_attrs = gateway_payment.get('attributes') or {}
+
+    if payment_attrs is None:
+        logger.warning('reconcile_payment %s: no gateway reference', payment.payment_number)
+        return None
+
+    status = (payment_attrs.get('status') or '').lower()
+    amount_cents = payment_attrs.get('amount')
+    currency = (payment_attrs.get('currency') or '').upper()
+    payment_method = payment_attrs.get('source', {}).get('type', '')
+
+    if status == 'paid':
+        try:
+            return finalize_paid_payment(
+                payment,
+                amount_cents=amount_cents,
+                currency=currency,
+                payment_method=payment_method,
+            )
+        except PaymentAmountMismatchError as exc:
+            logger.error('reconcile_payment %s: amount mismatch (%s)', payment.payment_number, exc)
+            return None
+    elif status == 'failed':
+        payment.payment_status = Payment.STATUS_FAILED
+        payment.save(update_fields=['payment_status', 'updated_at'])
+    elif status == 'expired':
+        payment.payment_status = Payment.STATUS_EXPIRED
+        payment.save(update_fields=['payment_status', 'updated_at'])
+
+    return None
+
+
 def expire_pending_payments(booking):
     """Expire every live checkout session for a booking and mark the local
     Payment records cancelled.
@@ -336,6 +406,11 @@ class PaymentWebhookView(APIView):
     Implements HMAC-SHA256 signature verification using the webhook secret
     configured in PAYMONGO_WEBHOOK_SECRET.  Payment status transitions are
     processed inside a database transaction.
+
+    Handles the hosted-checkout event ``checkout_session.payment.paid`` (the
+    primary path for this app) as well as the Payment Intents events
+    ``payment.paid`` and ``payment.failed``.  Payload parsing accepts both the
+    legacy JSON:API envelope and PayMongo's current envelope shape.
     """
     permission_classes = [AllowAny]
 
@@ -355,11 +430,18 @@ class PaymentWebhookView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ── 2. Extract event data ──
+        # ── 2. Extract event data (supports both PayMongo payload shapes) ──
+        # PayMongo has shipped two webhook envelopes:
+        #   legacy JSON:API — data.attributes.type / data.attributes.data
+        #   current        — data.type            / data.data
+        # Normalize both so either shape is handled correctly.
         event_data = request.data.get('data', {})
-        event_attributes = event_data.get('attributes', {})
-        event_type = event_attributes.get('type', '')
-        event_id = event_data.get('id', '')
+        event_attributes = event_data.get('attributes') or {}
+        event_type = event_attributes.get('type', '') or event_data.get('type', '')
+        resource = event_data.get('data') or event_attributes.get('data', {})
+        # Current shape has no top-level event id — fall back to the resource
+        # id (checkout session / payment id) so idempotency still works.
+        event_id = event_data.get('id', '') or resource.get('id', '')
 
         if not event_id:
             return Response({'detail': 'Missing event ID.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -370,34 +452,56 @@ class PaymentWebhookView(APIView):
             return Response({'detail': 'Event already processed.'})
 
         # ── 4. Dispatch by event type ──
-        handled_types = {'payment.paid', 'payment.failed', 'payment.expired', 'checkout_session.expired'}
+        # Hosted Checkout emits `checkout_session.payment.paid`; the Payment
+        # Intents flow emits `payment.paid`/`payment.failed`.  (PayMongo no
+        # longer exposes `payment.expired` or `checkout_session.expired` —
+        # expiry is handled by the reconciliation command + fresh retry.)
+        handled_types = {'payment.paid', 'checkout_session.payment.paid', 'payment.failed'}
         if event_type not in handled_types:
             logger.info('PayMongo webhook: unhandled event type %s', event_type)
             return Response({'detail': f'Event type {event_type} acknowledged.'})
 
-        # ── 5. Find the Payment record via the PayMongo payment ID ──
-        # The resource is nested under attributes.data.  For payment.* events
-        # it is a Payment object (id prefixed pay_).  For
-        # checkout_session.expired it is the CheckoutSession object (cs_), so
-        # we match via its embedded payments[] IDs instead.
-        resource = event_attributes.get('data', {})
-
-        if event_type == 'checkout_session.expired':
-            payment_ids = [
-                p.get('id')
-                for p in resource.get('payments', [])
-                if p.get('id')
-            ]
-            payment = Payment.objects.filter(
-                provider_reference__in=payment_ids,
-                payment_status=Payment.STATUS_PENDING,
-            ).select_related('booking', 'invoice').first()
+        # ── 5. Find the Payment record and its gateway-side attributes ──
+        if event_type == 'checkout_session.payment.paid':
+            # The resource is a Checkout Session; the payment (and its
+            # amount/currency/source) is nested under attributes.payments[].
+            session_id = resource.get('id', '')
+            payment = None
+            payment_attributes = None
+            gateway_payments = (resource.get('attributes') or {}).get('payments', [])
+            for gateway_payment in gateway_payments:
+                gateway_id = gateway_payment.get('id', '')
+                candidate = Payment.objects.filter(
+                    provider_reference=gateway_id,
+                    payment_status=Payment.STATUS_PENDING,
+                ).select_related('booking', 'invoice').first()
+                if candidate:
+                    payment = candidate
+                    payment_attributes = gateway_payment.get('attributes') or {}
+                    break
+            # v1 checkout sessions don't expose a payment id at creation time,
+            # so fall back to matching the booking's pending payment by its
+            # checkout_session_id (set when the session was created).
+            if payment is None and session_id:
+                payment = Payment.objects.filter(
+                    checkout_session_id=session_id,
+                    payment_status=Payment.STATUS_PENDING,
+                ).select_related('booking', 'invoice').first()
+                if payment:
+                    # The gateway payment attrs are the first paid entry.
+                    paid_entry = next(
+                        (p for p in gateway_payments
+                         if ((p.get('attributes') or {}).get('status') or '').lower() == 'paid'),
+                        gateway_payments[0] if gateway_payments else None,
+                    )
+                    payment_attributes = (paid_entry or {}).get('attributes') or {}
         else:
             paymongo_payment_id = resource.get('id', '')
             payment = Payment.objects.filter(
                 provider_reference=paymongo_payment_id,
                 payment_status=Payment.STATUS_PENDING,
             ).select_related('booking', 'invoice').first()
+            payment_attributes = resource.get('attributes') or {}
 
         if not payment:
             logger.warning(
@@ -413,12 +517,11 @@ class PaymentWebhookView(APIView):
         payment.raw_payload = request.data
         payment.webhook_event_id = event_id
 
-        if event_type == 'payment.paid':
+        if event_type in ('payment.paid', 'checkout_session.payment.paid'):
             # ── Amount/currency verification + state transition ──
-            resource_attributes = resource.get('attributes', {})
-            paid_amount_cents = resource_attributes.get('amount')
-            paid_currency = (resource_attributes.get('currency') or '').upper()
-            payment_method = resource_attributes.get('source', {}).get('type', '')
+            paid_amount_cents = payment_attributes.get('amount')
+            paid_currency = (payment_attributes.get('currency') or '').upper()
+            payment_method = payment_attributes.get('source', {}).get('type', '')
 
             try:
                 booking = finalize_paid_payment(
@@ -463,24 +566,6 @@ class PaymentWebhookView(APIView):
                 payment.payment_number, booking.booking_number,
             )
             return Response({'detail': 'Payment failure recorded.'})
-
-        elif event_type in ('payment.expired', 'checkout_session.expired'):
-            try:
-                with transaction.atomic():
-                    payment.payment_status = Payment.STATUS_EXPIRED
-                    payment.save()
-                    # Booking stays in awaiting_payment — the customer can
-                    # retry payment and get a fresh checkout session.
-            except IntegrityError:
-                logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
-                return Response({'detail': 'Event already processed.'})
-
-            notify.notify_payment_expired(booking)
-            logger.info(
-                'PayMongo webhook: payment %s expired for booking %s',
-                payment.payment_number, booking.booking_number,
-            )
-            return Response({'detail': 'Payment expiry recorded.'})
 
     def _verify_signature(self, body: bytes, signature: str) -> bool:
         """Verify PayMongo HMAC-SHA256 webhook signature with replay protection.

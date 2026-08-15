@@ -83,3 +83,12 @@ python manage.py seed_vehicles --clear
 
 # 4. Create admin superuser
 python manage.py createsuperuser
+
+#Payment Integration
+- create account on paymongo
+- aquire keys public and secret key
+- setup keys on env 
+- install ngrok 
+- generate tunnel to get url
+- create webhook on paymongo, check applicable events, paste your tunnel url to the webhook url, create webhook.
+- put your generated url tunnel to allowed host

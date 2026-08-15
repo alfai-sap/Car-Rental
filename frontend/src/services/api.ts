@@ -49,9 +49,22 @@ api.interceptors.response.use(
     const originalRequest = error.config
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      // Don't attempt refresh on auth endpoints themselves
-      const isAuthEndpoint = originalRequest.url?.includes('/auth/')
-      if (isAuthEndpoint && !originalRequest.url?.includes('/auth/token/refresh/')) {
+      // Never attempt a token refresh from an anonymous auth endpoint — a
+      // 401 there (bad password, bad token) is a final answer, not a session
+      // expiry.  Authenticated endpoints (e.g. /auth/me/ used to restore the
+      // session after a page reload) SHOULD attempt refresh.
+      const anonymousAuthEndpoints = [
+        '/auth/login/',
+        '/auth/register/',
+        '/auth/google/',
+        '/auth/verify-email/',
+        '/auth/resend-verification/',
+        '/auth/reset-password/',
+      ]
+      const isAnonymousAuthEndpoint = anonymousAuthEndpoints.some((ep) =>
+        originalRequest.url?.includes(ep),
+      )
+      if (isAnonymousAuthEndpoint) {
         accessToken = null
         return Promise.reject(error)
       }

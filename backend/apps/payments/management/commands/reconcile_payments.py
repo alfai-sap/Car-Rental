@@ -18,8 +18,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.payments.models import Payment
-from apps.payments.paymongo import PayMongoError, retrieve_payment
-from apps.payments.views import PaymentAmountMismatchError, finalize_paid_payment, payment_gateway_enabled
+from apps.payments.views import reconcile_payment, payment_gateway_enabled
 
 
 class Command(BaseCommand):
@@ -45,7 +44,6 @@ class Command(BaseCommand):
         pending = Payment.objects.filter(
             provider=Payment.PROVIDER_PAYMONGO,
             payment_status=Payment.STATUS_PENDING,
-            provider_reference__gt='',
             created_at__lt=cutoff,
         ).select_related('booking', 'invoice', 'booking__vehicle_unit')
 
@@ -57,56 +55,11 @@ class Command(BaseCommand):
 
         updated = 0
         for payment in pending:
-            try:
-                attrs = retrieve_payment(payment.provider_reference)
-            except PayMongoError as exc:
-                # Non-200 or unreachable gateway — log and continue.  A future
-                # run will retry this payment.
-                self.stderr.write(
-                    f'  {payment.payment_number}: retrieval failed ({exc})'
-                )
-                continue
-
-            status = (attrs.get('status') or '').lower()
-            amount_cents = attrs.get('amount')
-            currency = (attrs.get('currency') or '').upper()
-            payment_method = attrs.get('source', {}).get('type', '')
-
-            if status == 'paid':
-                try:
-                    finalize_paid_payment(
-                        payment,
-                        amount_cents=amount_cents,
-                        currency=currency,
-                        payment_method=payment_method,
-                    )
-                except PaymentAmountMismatchError as exc:
-                    # Do not silently resolve a mismatched payment.  Leave it
-                    # pending and surface it for a human to review.
-                    self.stderr.write(
-                        self.style.ERROR(
-                            f'  {payment.payment_number}: amount mismatch ({exc}); '
-                            f'left pending for manual review.'
-                        )
-                    )
-                    continue
+            booking = reconcile_payment(payment)
+            if booking:
                 updated += 1
                 self.stdout.write(self.style.SUCCESS(
                     f'  {payment.payment_number}: reconciled as paid'
                 ))
-            elif status == 'failed':
-                payment.payment_status = Payment.STATUS_FAILED
-                payment.save(update_fields=['payment_status', 'updated_at'])
-                updated += 1
-                self.stdout.write(f'  {payment.payment_number}: reconciled as failed')
-            elif status == 'expired':
-                payment.payment_status = Payment.STATUS_EXPIRED
-                payment.save(update_fields=['payment_status', 'updated_at'])
-                updated += 1
-                self.stdout.write(f'  {payment.payment_number}: reconciled as expired')
-            else:
-                self.stdout.write(
-                    f'  {payment.payment_number}: gateway status "{status}" — no local change'
-                )
 
         self.stdout.write(self.style.SUCCESS(f'Reconciliation complete ({updated} payment(s) updated).'))

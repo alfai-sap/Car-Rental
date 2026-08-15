@@ -50,6 +50,27 @@ interface AssignmentEntry {
   created_at: string
 }
 
+interface PaymentRecord {
+  id: number
+  payment_number: string
+  amount: string
+  currency: string
+  payment_status: string
+  payment_method: string
+  paid_at: string | null
+  created_at: string
+}
+
+interface InvoiceRecord {
+  id: number
+  invoice_number: string
+  subtotal: string
+  discount: string
+  total: string
+  invoice_status: string
+  due_date: string | null
+}
+
 interface Booking {
   id: number
   booking_number: string
@@ -80,6 +101,8 @@ interface Booking {
   special_request: string
   rejection_reason: string
   return_unit_status: string
+  payments: PaymentRecord[]
+  invoice: InvoiceRecord | null
   created_at: string
   updated_at: string
 }
@@ -239,8 +262,24 @@ async function fetchBooking() {
       booking.value = null
     }
     await loadAssignmentHistory()
+
+    // If the customer just returned from the hosted checkout page, force a
+    // gateway re-check so a missed webhook doesn't leave the booking stuck
+    // in awaiting_payment.  Only do this once, when the payment query param
+    // is present.
+    if (route.query.payment === 'success' && booking.value?.status === 'awaiting_payment') {
+      await checkPaymentStatus()
+    }
   } catch { error.value = 'Booking not found.' }
   finally { loading.value = false }
+}
+
+async function checkPaymentStatus() {
+  if (!booking.value) return
+  try {
+    const response = await api.post(`/bookings/${booking.value.id}/check-payment/`)
+    booking.value = response.data
+  } catch { /* keep current state on failure */ }
 }
 
 const currentIdx = computed(() => booking.value ? currentStepIndex(booking.value.status) : 0)
@@ -313,6 +352,50 @@ onMounted(fetchBooking)
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <!-- LEFT COLUMN -->
           <div class="lg:col-span-2 space-y-6">
+            <!-- Customer Profile (snapshot at booking) -->
+            <div class="rounded-md border border-zinc-200 bg-white p-5">
+              <h2 class="text-sm font-semibold text-zinc-900 mb-1">Your Profile</h2>
+              <p class="text-xs text-zinc-400 mb-4">Details captured and submitted to the administrator when this booking was placed.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p class="text-xs text-zinc-400">Name</p>
+                  <p class="text-zinc-900 font-medium truncate">{{ booking.identity_snapshot?.customer_name || booking.customer_name || '—' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-zinc-400">Email</p>
+                  <p class="text-zinc-900 truncate">{{ booking.identity_snapshot?.customer_email || booking.customer_email || '—' }}</p>
+                </div>
+                <div>
+                  <p class="text-xs text-zinc-400">Phone</p>
+                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_phone || booking.customer_phone || '—' }}</p>
+                </div>
+              </div>
+
+              <!-- Identity Documents (immutable snapshot captured at booking) -->
+              <div v-if="booking.identity_snapshot && booking.identity_snapshot.documents && booking.identity_snapshot.documents.length > 0" class="pt-4 mt-4 border-t border-zinc-100">
+                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Identity Documents</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="p-3 rounded-md bg-zinc-50 border border-zinc-100">
+                    <p class="text-xs font-medium text-zinc-700 capitalize">{{ docTypeLabel(doc.document_type) }}</p>
+                    <p class="text-xs text-zinc-500 mb-2">{{ doc.document_number }}</p>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <p class="text-[10px] text-zinc-400 mb-1">Front</p>
+                        <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-16 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
+                        <div v-else class="w-full h-16 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[10px] text-zinc-400">No image</span></div>
+                      </div>
+                      <div>
+                        <p class="text-[10px] text-zinc-400 mb-1">Back</p>
+                        <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-16 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
+                        <div v-else class="w-full h-16 bg-zinc-200 rounded flex items-center justify-center"><span class="text-[10px] text-zinc-400">No image</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-xs text-zinc-400 pt-4 mt-4 border-t border-zinc-100">No identity documents submitted.</div>
+            </div>
+
             <div class="rounded-md border border-zinc-200 bg-white p-6">
               <h2 class="text-sm font-semibold text-zinc-900 mb-4">Booking Details</h2>
               <div class="grid grid-cols-2 gap-4 mb-6">
@@ -364,52 +447,13 @@ onMounted(fetchBooking)
             </div>
           </div>
           <!-- RIGHT COLUMN -->
-          <div>
-            <!-- Customer Profile -->
-            <div class="rounded-md border border-zinc-200 bg-white p-6 mb-6">
-              <h2 class="text-sm font-semibold text-zinc-900 mb-1">Your Profile</h2>
-              <p class="text-xs text-zinc-400 mb-4">These are the details captured and submitted to the administrator for verification when this booking was placed.</p>
-              <div class="space-y-3 text-sm">
-                <div>
-                  <p class="text-xs text-zinc-400">Name</p>
-                  <p class="text-zinc-900 font-medium">{{ booking.identity_snapshot?.customer_name || booking.customer_name || '—' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-zinc-400">Email</p>
-                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_email || booking.customer_email || '—' }}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-zinc-400">Phone</p>
-                  <p class="text-zinc-900">{{ booking.identity_snapshot?.customer_phone || booking.customer_phone || '—' }}</p>
-                </div>
-              </div>
+          <div class="space-y-6">
+            <!-- Payment Details -->
+            <div class="rounded-md border border-zinc-200 bg-white p-6">
+              <h2 class="text-sm font-semibold text-zinc-900 mb-4">Payment Details</h2>
 
-              <!-- Identity Documents (immutable snapshot captured at booking) -->
-              <div v-if="booking.identity_snapshot && booking.identity_snapshot.documents && booking.identity_snapshot.documents.length > 0" class="pt-4 mt-4 border-t border-zinc-100">
-                <p class="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Identity Documents</p>
-                <div v-for="doc in booking.identity_snapshot.documents" :key="doc.id" class="p-3 rounded-md bg-zinc-50 border border-zinc-100 mb-2">
-                  <p class="text-xs font-medium text-zinc-700 capitalize">{{ docTypeLabel(doc.document_type) }}</p>
-                  <p class="text-xs text-zinc-500 mb-2">{{ doc.document_number }}</p>
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>
-                      <p class="text-[10px] text-zinc-400 mb-1">Front</p>
-                      <img v-if="doc.front_image" :src="doc.front_image" class="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.front_image" alt="Front" />
-                      <div v-else class="w-full h-20 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
-                    </div>
-                    <div>
-                      <p class="text-[10px] text-zinc-400 mb-1">Back</p>
-                      <img v-if="doc.back_image" :src="doc.back_image" class="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition" @click="lightboxImage = doc.back_image" alt="Back" />
-                      <div v-else class="w-full h-20 bg-zinc-200 rounded flex items-center justify-center"><span class="text-xs text-zinc-400">No image</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-xs text-zinc-400 pt-4 mt-4 border-t border-zinc-100">No identity documents submitted.</div>
-            </div>
-
-            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-4 sticky top-24">
-              <h2 class="text-sm font-semibold text-zinc-900">Payment</h2>
-              <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 text-center">
+              <!-- Status indicator -->
+              <div class="rounded-md bg-zinc-50 border border-zinc-100 p-4 text-center mb-4">
                 <CreditCard class="h-8 w-8 text-zinc-300 mx-auto mb-2" />
                 <p class="text-xs text-zinc-500">
                   <template v-if="booking.status === 'awaiting_payment'">Payment is required to confirm your booking.</template>
@@ -418,10 +462,90 @@ onMounted(fetchBooking)
                   <template v-else>No payment information available</template>
                 </p>
               </div>
-              <Button v-if="canPay" class="w-full" :disabled="paying" @click="initiatePayment">{{ paying ? 'Redirecting...' : 'Pay Now' }}</Button>
-              <p v-if="paymentNotice" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+
+              <!-- Payment records -->
+              <div v-if="booking.invoice || (booking.payments && booking.payments.length > 0)" class="rounded-md border border-zinc-200 overflow-hidden">
+                <!-- Receipt header -->
+                <div class="bg-zinc-50 border-b border-zinc-200 px-4 py-3">
+                  <div class="flex items-center justify-between">
+                    <p class="text-xs font-semibold text-zinc-900 uppercase tracking-wider">Receipt</p>
+                    <span v-if="booking.invoice" class="text-xs font-medium" :class="{
+                      'text-green-700': booking.invoice.invoice_status === 'paid',
+                      'text-amber-600': booking.invoice.invoice_status === 'pending',
+                      'text-zinc-500': !['paid', 'pending'].includes(booking.invoice.invoice_status),
+                    }">{{ booking.invoice.invoice_status }}</span>
+                  </div>
+                  <p v-if="booking.invoice" class="text-[11px] text-zinc-500 mt-0.5 font-mono">{{ booking.invoice.invoice_number }}</p>
+                </div>
+
+                <!-- Receipt body -->
+                <div class="px-4 py-3 space-y-2">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Booking</span>
+                    <span class="text-zinc-900 font-mono">{{ booking.booking_number }}</span>
+                  </div>
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Vehicle</span>
+                    <span class="text-zinc-900 text-right">{{ booking.vehicle_name }}</span>
+                  </div>
+                  <div v-if="booking.invoice?.due_date" class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Due Date</span>
+                    <span class="text-zinc-900">{{ formatDate(booking.invoice.due_date) }}</span>
+                  </div>
+
+                  <hr class="border-dashed border-zinc-200" />
+
+                  <div class="flex justify-between text-xs">
+                    <span class="text-zinc-500">Subtotal</span>
+                    <span class="text-zinc-900">₱{{ Number(booking.invoice?.subtotal ?? booking.subtotal).toLocaleString('en-PH') }}</span>
+                  </div>
+                  <div v-if="Number(booking.invoice?.discount ?? booking.discount_amount) > 0" class="flex justify-between text-xs text-green-700">
+                    <span>Discount</span>
+                    <span>− ₱{{ Number(booking.invoice?.discount ?? booking.discount_amount).toLocaleString('en-PH') }}</span>
+                  </div>
+
+                  <hr class="border-dashed border-zinc-200" />
+
+                  <div class="flex justify-between text-sm font-semibold">
+                    <span class="text-zinc-900">Total Amount</span>
+                    <span class="text-zinc-900">₱{{ Number(booking.invoice?.total ?? booking.estimated_total).toLocaleString('en-PH') }}</span>
+                  </div>
+
+                  <!-- Per-payment entries -->
+                  <template v-if="booking.payments && booking.payments.length > 0">
+                    <hr class="border-dashed border-zinc-200" />
+                    <div v-for="p in booking.payments" :key="p.id" class="space-y-1">
+                      <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500 font-mono">{{ p.payment_number }}</span>
+                        <span class="text-zinc-900 font-medium">₱{{ Number(p.amount).toLocaleString('en-PH') }}</span>
+                      </div>
+                      <div class="flex justify-between text-xs">
+                        <span class="text-zinc-400">{{ p.payment_method || '—' }}</span>
+                        <span class="text-xs font-medium" :class="{
+                          'text-green-700': p.payment_status === 'paid',
+                          'text-amber-600': p.payment_status === 'pending',
+                          'text-red-600': ['failed', 'expired', 'cancelled'].includes(p.payment_status),
+                          'text-zinc-500': !['paid', 'pending', 'failed', 'expired', 'cancelled'].includes(p.payment_status),
+                        }">{{ p.payment_status }}</span>
+                      </div>
+                      <p v-if="p.paid_at" class="text-[11px] text-zinc-400 text-right">Paid {{ formatDateTime(p.paid_at) }}</p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div v-if="!booking.payments?.length && !booking.invoice" class="text-xs text-zinc-400 text-center py-2">
+                No payment records yet.
+              </div>
+            </div>
+
+            <!-- Messages, Indicators & Reminders -->
+            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-3">
+              <h2 class="text-sm font-semibold text-zinc-900">Updates</h2>
+
+              <div v-if="paymentNotice" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 {{ paymentNotice }}
-              </p>
+              </div>
 
               <!-- Message: admin will assign unit after payment -->
               <div v-if="booking.status === 'confirmed'" class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
@@ -435,6 +559,11 @@ onMounted(fetchBooking)
                 <p class="text-xs text-emerald-700">
                   <span class="font-medium">Vehicle assigned:</span> {{ booking.vehicle_unit_plate }}
                 </p>
+              </div>
+
+              <div v-if="booking.status === 'completed'" class="text-center">
+                <CheckCircle class="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <p class="text-xs text-green-700 font-medium">Rental Complete</p>
               </div>
 
               <!-- Unit history for customer -->
@@ -461,8 +590,13 @@ onMounted(fetchBooking)
                   </button>
                 </div>
               </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="rounded-md border border-zinc-200 bg-white p-6 space-y-3">
+              <h2 class="text-sm font-semibold text-zinc-900">Actions</h2>
+              <Button v-if="canPay" class="w-full" :disabled="paying" @click="initiatePayment">{{ paying ? 'Redirecting...' : 'Pay Now' }}</Button>
               <Button v-if="canCancel" variant="ghost" class="w-full text-red-600 hover:bg-red-50" :disabled="cancelling" @click="openCancelModal">{{ cancelling ? 'Cancelling...' : 'Cancel Request' }}</Button>
-              <div v-if="booking.status === 'completed'" class="text-center"><CheckCircle class="h-8 w-8 text-green-500 mx-auto mb-2" /><p class="text-xs text-green-700 font-medium">Rental Complete</p></div>
             </div>
           </div>
         </div>

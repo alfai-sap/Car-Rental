@@ -18,6 +18,12 @@ from apps.vehicles.models import Vehicle
 User = get_user_model()
 
 
+@override_settings(
+    PAYMENT_PROVIDER='disabled',
+    PAYMONGO_PUBLIC_KEY='',
+    PAYMONGO_SECRET_KEY='',
+    PAYMONGO_WEBHOOK_SECRET='',
+)
 class PaymentAPITests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
@@ -201,6 +207,133 @@ class PaymentAPITests(TestCase):
 			title__startswith='Payment Received for Inactive Booking:',
 		).exists())
 
+	def test_webhook_checkout_session_payment_paid_confirms_booking(self):
+		"""The hosted-checkout event checkout_session.payment.paid confirms a booking.
+
+		PayMongo emits this event (not payment.paid) when the customer pays on
+		the hosted checkout page.  The payment is nested inside the session's
+		payments[] array; the handler must locate it and finalize the booking.
+		"""
+		invoice = Invoice.objects.create(
+			booking=self.booking,
+			subtotal=self.booking.estimated_total,
+			discount=0,
+			total=self.booking.estimated_total,
+			invoice_status=Invoice.STATUS_PENDING,
+		)
+		payment = Payment.objects.create(
+			booking=self.booking,
+			invoice=invoice,
+			provider=Payment.PROVIDER_PAYMONGO,
+			provider_reference='pay_checkout_1',
+			amount=invoice.total,
+			currency='PHP',
+			payment_status=Payment.STATUS_PENDING,
+		)
+		self.booking.status = 'awaiting_payment'
+		self.booking.save(update_fields=['status', 'updated_at'])
+
+		event_data = {
+			'data': {
+				'id': 'evt_cs_1',
+				'attributes': {
+					'type': 'checkout_session.payment.paid',
+					'data': {
+						'id': 'cs_123',
+						'attributes': {
+							'payments': [
+								{
+									'id': 'pay_checkout_1',
+									'attributes': {
+										'amount': int(payment.invoice.total * 100),
+										'currency': 'PHP',
+										'source': {'type': 'card'},
+									},
+								},
+							],
+						},
+					},
+				},
+			},
+		}
+		event_data, headers = self._signed_webhook(event_data)
+		with override_settings(
+			PAYMENT_PROVIDER='paymongo',
+			PAYMONGO_PUBLIC_KEY='pk_test',
+			PAYMONGO_SECRET_KEY='sk_test',
+			PAYMONGO_WEBHOOK_SECRET='test-webhook-secret',
+		):
+			response = self.client.post(
+				'/api/payments/webhook/',
+				event_data,
+				format='json',
+				**headers,
+			)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		payment.refresh_from_db()
+		self.booking.refresh_from_db()
+		self.assertEqual(payment.payment_status, Payment.STATUS_PAID)
+		self.assertEqual(self.booking.status, 'confirmed')
+
+	def test_webhook_stale_expiry_event_is_acknowledged_not_processed(self):
+		"""The retired payment.expired event must not leave the booking confirmed.
+
+		PayMongo no longer offers payment.expired / checkout_session.expired.
+		Any such event is acknowledged but treated as unhandled — it must not
+		mark the payment paid or advance the booking.
+		"""
+		invoice = Invoice.objects.create(
+			booking=self.booking,
+			subtotal=self.booking.estimated_total,
+			discount=0,
+			total=self.booking.estimated_total,
+			invoice_status=Invoice.STATUS_PENDING,
+		)
+		Payment.objects.create(
+			booking=self.booking,
+			invoice=invoice,
+			provider=Payment.PROVIDER_PAYMONGO,
+			provider_reference='pay_stale_1',
+			amount=invoice.total,
+			currency='PHP',
+			payment_status=Payment.STATUS_PENDING,
+		)
+		self.booking.status = 'awaiting_payment'
+		self.booking.save(update_fields=['status', 'updated_at'])
+
+		event_data = {
+			'data': {
+				'id': 'evt_stale_1',
+				'attributes': {
+					'type': 'payment.expired',
+					'data': {
+						'id': 'pay_stale_1',
+						'attributes': {'amount': int(invoice.total * 100), 'currency': 'PHP'},
+					},
+				},
+			},
+		}
+		event_data, headers = self._signed_webhook(event_data)
+		with override_settings(
+			PAYMENT_PROVIDER='paymongo',
+			PAYMONGO_PUBLIC_KEY='pk_test',
+			PAYMONGO_SECRET_KEY='sk_test',
+			PAYMONGO_WEBHOOK_SECRET='test-webhook-secret',
+		):
+			response = self.client.post(
+				'/api/payments/webhook/',
+				event_data,
+				format='json',
+				**headers,
+			)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		payment = Payment.objects.get(provider_reference='pay_stale_1')
+		self.booking.refresh_from_db()
+		self.assertEqual(payment.payment_status, Payment.STATUS_PENDING)
+		self.assertEqual(self.booking.status, 'awaiting_payment')
+
 	def test_pending_payment_checkout_is_reused(self):
 		"""A still-pending payment keeps its live checkout URL on re-attempt."""
 		self._login(self.customer)
@@ -284,7 +417,7 @@ class PaymentAPITests(TestCase):
 		payment = self._make_pending_paymongo_payment()
 
 		from unittest import mock
-		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+		with mock.patch('apps.payments.paymongo.retrieve_payment') as retrieve:
 			retrieve.return_value = {
 				'status': 'paid',
 				'amount': int(payment.invoice.total * 100),
@@ -311,7 +444,7 @@ class PaymentAPITests(TestCase):
 		payment = self._make_pending_paymongo_payment()
 
 		from unittest import mock
-		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+		with mock.patch('apps.payments.paymongo.retrieve_payment') as retrieve:
 			retrieve.return_value = {
 				'status': 'paid',
 				'amount': int(payment.invoice.total * 100) - 1,
@@ -339,7 +472,7 @@ class PaymentAPITests(TestCase):
 		self.booking.save(update_fields=['status', 'updated_at'])
 
 		from unittest import mock
-		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+		with mock.patch('apps.payments.paymongo.retrieve_payment') as retrieve:
 			retrieve.return_value = {
 				'status': 'paid',
 				'amount': int(payment.invoice.total * 100),

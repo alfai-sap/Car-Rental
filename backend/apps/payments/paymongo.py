@@ -210,6 +210,34 @@ def retrieve_payment(paymongo_payment_id: str) -> Dict[str, Any]:
     return data['data']['attributes']
 
 
+def retrieve_checkout_session(session_id: str) -> Dict[str, Any]:
+    """Retrieve a Checkout Session (and its payments) by session ID.
+
+    v1 checkout sessions do not expose a payment id at creation time, so a
+    pending Payment may only have ``checkout_session_id``.  This fetches the
+    session's ``attributes`` (which includes the ``payments[]`` list) so the
+    reconciliation command can resolve the payment status for such records.
+    """
+    url = f'{PAYMONGO_API_BASE}/checkout_sessions/{session_id}'
+
+    try:
+        response = requests.get(url, headers=_headers(), timeout=10)
+    except requests.RequestException as e:
+        logger.error('PayMongo checkout session retrieval failed for %s: %s', session_id, e)
+        raise PayMongoError(f'Failed to connect to PayMongo: {e}')
+
+    try:
+        data = response.json()
+    except ValueError:
+        logger.error('PayMongo checkout session retrieval returned non-JSON (HTTP %s)', response.status_code)
+        raise PayMongoError('PayMongo returned an unexpected response.')
+
+    if response.status_code != 200:
+        raise PayMongoError(_extract_error(data))
+
+    return data['data']['attributes']
+
+
 def _extract_error(data: Dict[str, Any]) -> str:
     """Extract a human-readable error message from PayMongo's response."""
     errors = data.get('errors', [])

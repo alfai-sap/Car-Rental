@@ -193,6 +193,33 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
 
     # ── Customer actions ──
 
+    @action(detail=True, methods=['post'], url_path='check-payment')
+    def check_payment(self, request, pk=None):
+        """Re-check a pending payment against the gateway.
+
+        Used by the frontend after the customer returns from the hosted
+        checkout page.  If the webhook was missed or is still in flight, this
+        queries PayMongo directly and finalises the booking so the UI reflects
+        the real state immediately.
+        """
+        booking = self.get_object()
+        if booking.customer != request.user and not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        from apps.payments.models import Payment
+        from apps.payments.views import reconcile_payment
+
+        pending = Payment.objects.filter(
+            booking=booking,
+            payment_status=Payment.STATUS_PENDING,
+        ).select_related('invoice', 'booking').order_by('-created_at').first()
+
+        if pending:
+            reconcile_payment(pending)
+
+        booking.refresh_from_db()
+        return Response(BookingSerializer(booking).data)
+
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel(self, request, pk=None):
         booking = self.get_object()
