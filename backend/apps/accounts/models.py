@@ -7,6 +7,7 @@ from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.core.validators import validate_image_size, validate_image_content
+from apps.core.storage import private_identity_storage
 
 
 class UserManager(BaseUserManager):
@@ -207,10 +208,12 @@ class IdentityDocument(models.Model):
     document_number = models.CharField(max_length=50)
     front_image = models.ImageField(
         upload_to='identity_docs/front/',
+        storage=private_identity_storage,
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp']), validate_image_size, validate_image_content],
     )
     back_image = models.ImageField(
         upload_to='identity_docs/back/',
+        storage=private_identity_storage,
         blank=True, null=True,
         validators=[FileExtensionValidator(['jpg', 'jpeg', 'png', 'webp']), validate_image_size, validate_image_content],
     )

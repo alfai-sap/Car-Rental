@@ -12,6 +12,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
+# ── Legacy numeric URL IDs ──
+# Accept raw integer primary keys in place of hashed IDs (for backwards
+# compatibility).  Enabled by default while DEBUG is on (local development
+# and the test suite) and disabled in production unless explicitly
+# re-enabled.  This is evaluated once at startup because Django's test
+# runner forces settings.DEBUG=False at runtime, which would otherwise
+# break the test suite that still uses numeric PKs.
+ALLOW_LEGACY_NUMERIC_IDS = os.getenv('ALLOW_LEGACY_NUMERIC_IDS', '').strip().lower()
+if ALLOW_LEGACY_NUMERIC_IDS == '':
+    ALLOW_LEGACY_NUMERIC_IDS = DEBUG
+else:
+    ALLOW_LEGACY_NUMERIC_IDS = ALLOW_LEGACY_NUMERIC_IDS == 'true'
+
 # ── Sentry (error monitoring) ───────────────────────────
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
 if SENTRY_DSN and not DEBUG:
@@ -151,11 +164,23 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# ── Private storage for sensitive uploads (identity documents) ──
+# Identity documents (driver's license / passport photos) and their booking
+# snapshot copies are stored here, OUTSIDE the publicly-served MEDIA_ROOT.
+# These files are only ever read through the signed-token views, never by a
+# static file server.  Do NOT point Nginx/static hosting at this directory.
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'private_media'
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS — never allow all origins in production, regardless of DEBUG
 CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() == 'true'
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if origin.strip()]
+# The refresh token travels in an httpOnly cookie, so cross-origin requests
+# must be allowed to send and receive credentials.  Only ever combined with
+# an exact-origin allowlist (never CORS_ALLOW_ALL_ORIGINS).
+CORS_ALLOW_CREDENTIALS = True
+
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'disabled').strip().lower()
@@ -204,6 +229,15 @@ if not DEBUG:
             'CORS_ALLOW_ALL_ORIGINS must be False when DEBUG=False. '
             'Set CORS_ALLOWED_ORIGINS to your frontend origin instead.'
         )
+
+# Credentials may never be combined with a wildcard origin: browsers forbid
+# `Access-Control-Allow-Origin: *` alongside `Access-Control-Allow-Credentials`,
+# and the httpOnly refresh cookie would be silently dropped.
+if CORS_ALLOW_CREDENTIALS and CORS_ALLOW_ALL_ORIGINS:
+    raise ImproperlyConfigured(
+        'CORS_ALLOW_CREDENTIALS cannot be used with CORS_ALLOW_ALL_ORIGINS. '
+        'Set CORS_ALLOWED_ORIGINS to your exact frontend origin(s) instead.'
+    )
 
 # ── Startup validation: PayMongo configuration ──
 if PAYMENT_PROVIDER == 'paymongo':

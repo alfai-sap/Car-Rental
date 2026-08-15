@@ -243,3 +243,113 @@ class PaymentAPITests(TestCase):
 		self.assertEqual(new_payment.payment_status, Payment.STATUS_PENDING)
 		# The new session must not carry over the expired checkout URL.
 		self.assertNotEqual(second.data['payment']['id'], payment.id)
+
+	def _make_pending_paymongo_payment(self):
+		"""Create a PENDING PayMongo payment with an invoice for the booking."""
+		# Real checkout flow transitions approved → awaiting_payment first.
+		self.booking.status = 'awaiting_payment'
+		self.booking.save(update_fields=['status', 'updated_at'])
+
+		invoice = Invoice.objects.create(
+			booking=self.booking,
+			subtotal=self.booking.estimated_total,
+			discount=0,
+			total=self.booking.estimated_total,
+			invoice_status=Invoice.STATUS_PENDING,
+		)
+		payment = Payment.objects.create(
+			booking=self.booking,
+			invoice=invoice,
+			provider=Payment.PROVIDER_PAYMONGO,
+			provider_reference='pay_reconcile_1',
+			amount=invoice.total,
+			currency='PHP',
+			payment_status=Payment.STATUS_PENDING,
+		)
+		# Backdate creation so the --older-than-minutes window includes it.
+		Payment.objects.filter(pk=payment.pk).update(
+			created_at=timezone.now() - timedelta(minutes=30),
+		)
+		payment.refresh_from_db()
+		return payment
+
+	@override_settings(
+		PAYMENT_PROVIDER='paymongo',
+		PAYMONGO_PUBLIC_KEY='pk_test',
+		PAYMONGO_SECRET_KEY='sk_test',
+		PAYMONGO_WEBHOOK_SECRET='test-webhook-secret',
+	)
+	def test_reconcile_payment_marks_missed_paid_webhook(self):
+		"""A missed payment.paid webhook is recovered by the reconciliation command."""
+		payment = self._make_pending_paymongo_payment()
+
+		from unittest import mock
+		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+			retrieve.return_value = {
+				'status': 'paid',
+				'amount': int(payment.invoice.total * 100),
+				'currency': 'PHP',
+				'source': {'type': 'gcash'},
+			}
+			from django.core.management import call_command
+			call_command('reconcile_payments', stdout=mock.MagicMock(), stderr=mock.MagicMock())
+
+		payment.refresh_from_db()
+		self.booking.refresh_from_db()
+		self.assertEqual(payment.payment_status, Payment.STATUS_PAID)
+		self.assertEqual(payment.invoice.invoice_status, Invoice.STATUS_PAID)
+		self.assertEqual(self.booking.status, 'confirmed')
+
+	@override_settings(
+		PAYMENT_PROVIDER='paymongo',
+		PAYMONGO_PUBLIC_KEY='pk_test',
+		PAYMONGO_SECRET_KEY='sk_test',
+		PAYMONGO_WEBHOOK_SECRET='test-webhook-secret',
+	)
+	def test_reconcile_payment_amount_mismatch_leaves_pending(self):
+		"""An amount mismatch is never silently resolved — it stays pending for review."""
+		payment = self._make_pending_paymongo_payment()
+
+		from unittest import mock
+		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+			retrieve.return_value = {
+				'status': 'paid',
+				'amount': int(payment.invoice.total * 100) - 1,
+				'currency': 'PHP',
+				'source': {'type': 'gcash'},
+			}
+			from django.core.management import call_command
+			call_command('reconcile_payments', stdout=mock.MagicMock(), stderr=mock.MagicMock())
+
+		payment.refresh_from_db()
+		self.booking.refresh_from_db()
+		self.assertEqual(payment.payment_status, Payment.STATUS_PENDING)
+		self.assertEqual(self.booking.status, 'awaiting_payment')
+
+	@override_settings(
+		PAYMENT_PROVIDER='paymongo',
+		PAYMONGO_PUBLIC_KEY='pk_test',
+		PAYMONGO_SECRET_KEY='sk_test',
+		PAYMONGO_WEBHOOK_SECRET='test-webhook-secret',
+	)
+	def test_reconcile_payment_does_not_resurrect_cancelled_booking(self):
+		"""Reconciliation must never confirm a booking that was cancelled."""
+		payment = self._make_pending_paymongo_payment()
+		self.booking.status = 'cancelled'
+		self.booking.save(update_fields=['status', 'updated_at'])
+
+		from unittest import mock
+		with mock.patch('apps.payments.management.commands.reconcile_payments.retrieve_payment') as retrieve:
+			retrieve.return_value = {
+				'status': 'paid',
+				'amount': int(payment.invoice.total * 100),
+				'currency': 'PHP',
+				'source': {'type': 'gcash'},
+			}
+			from django.core.management import call_command
+			call_command('reconcile_payments', stdout=mock.MagicMock(), stderr=mock.MagicMock())
+
+		payment.refresh_from_db()
+		self.booking.refresh_from_db()
+		self.assertEqual(payment.payment_status, Payment.STATUS_PAID)
+		self.assertEqual(self.booking.status, 'cancelled')

@@ -19,7 +19,6 @@ class Invoice(models.Model):
     invoice_number = models.CharField(max_length=12, unique=True, editable=False)
     booking = models.OneToOneField('bookings.Booking', on_delete=models.PROTECT, related_name='invoice')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
-    additional_charges = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     invoice_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
@@ -39,7 +38,7 @@ class Invoice(models.Model):
         # Only recalculate total for unpaid invoices to prevent
         # paid invoices from changing after the fact.
         if self.invoice_status != self.STATUS_PAID:
-            self.total = (self.subtotal or 0) + (self.additional_charges or 0) - (self.discount or 0)
+            self.total = (self.subtotal or 0) - (self.discount or 0)
             if self.total < 0:
                 self.total = 0
         super().save(*args, **kwargs)
@@ -75,6 +74,11 @@ class Payment(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default=PROVIDER_DISABLED)
     provider_reference = models.CharField(max_length=120, blank=True)
+    checkout_session_id = models.CharField(
+        max_length=120, blank=True,
+        help_text='PayMongo Checkout Session ID — used to expire the session '
+                  'when the booking is cancelled while payment is pending.',
+    )
     checkout_url = models.URLField(blank=True)
     currency = models.CharField(max_length=3, default='PHP')
     amount = models.DecimalField(max_digits=10, decimal_places=2)

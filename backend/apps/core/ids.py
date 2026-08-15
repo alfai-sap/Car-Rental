@@ -11,10 +11,11 @@ records by editing the number in a URL (``/transactions/1``, ``/vehicles/2``,
   impossible without the secret key.
 * Decoding is cheap and stateless (no DB round-trip for a lookup table).
 
-Backwards compatibility: pure-digit values are treated as legacy numeric PKs.
-This keeps existing integrations (tests, email links, bookmarks) working while
-new URLs use the opaque form.
+Legacy numeric PKs are accepted only while ``ALLOW_LEGACY_NUMERIC_IDS`` is
+on (development and tests).  In production they are rejected so URLs cannot
+be enumerated.
 """
+from django.conf import settings
 from django.core import signing
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -37,19 +38,26 @@ def encode_id(model_name: str, pk) -> str:
 
 
 def decode_id(model_name: str, value) -> int:
-    """Decode a signed token (or legacy numeric PK) back to an integer PK.
+    """Decode a signed token back to an integer PK.
 
-    Raises InvalidId when the value is malformed, expired of trust, or was
-    signed for a different model.
+    Legacy numeric PKs are only accepted while ``ALLOW_LEGACY_NUMERIC_IDS`` is
+    true (local development and the test suite).  In production the raw,
+    sequential PK is rejected so records cannot be enumerated by editing the
+    number in a URL — the whole point of the hashed-ID scheme.
+
+    Raises InvalidId when the value is malformed, out of trust, or signed
+    for a different model.
     """
     if value is None:
         raise InvalidId('Missing identifier.')
 
     raw = str(value).strip()
 
-    # Legacy numeric passthrough (backwards compatibility).
+    # Legacy numeric passthrough (backwards compatibility) — dev/test only.
     if raw.isdigit():
-        return int(raw)
+        if settings.ALLOW_LEGACY_NUMERIC_IDS:
+            return int(raw)
+        raise InvalidId('Numeric identifiers are not allowed.')
 
     try:
         data = signing.loads(raw, salt=_SALT)

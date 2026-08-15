@@ -30,6 +30,7 @@ from .serializers import (
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
     account_token_generator,
+    unsign_identity_image_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -277,15 +278,18 @@ class LoginView(views.APIView):
 
         if user and user.is_active and user.check_password(password):
             # ── Require email verification before sign-in ──
-            # Unverified accounts are rejected with a distinct, honest
-            # message here (not an anti-enumeration concern: the email was
-            # proven to exist via registration, and the user needs guidance
-            # to complete verification).
+            # Unverified accounts receive the same generic 401 as any bad
+            # credential, so an attacker who correctly guesses a valid
+            # email/password pair gains no confirmation that the credentials
+            # were correct (only that the account is not yet verified).  The
+            # always-visible frontend hint banner and the anti-enumerating
+            # resend-verification endpoint guide the legitimate user instead.
             if not user.is_verified:
-                return Response(
-                    {'detail': 'Please verify your email address before signing in.', 'code': 'email_not_verified'},
-                    status=status.HTTP_403_FORBIDDEN,
+                logger.info(
+                    'Login attempt for unverified account: %s (generic response)',
+                    email,
                 )
+                return Response({'detail': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
             # Successful login — clear any stale lockout state
             user.clear_failed_attempts()
@@ -375,6 +379,12 @@ class MeView(views.APIView):
         data['profile_locked'] = has_active_bookings(request.user)
         # Backwards-compatible alias used by older frontend builds
         data['identity_locked'] = data['profile_locked']
+        # Whether the staff-only manual payment confirmation action is
+        # available.  The admin UI uses this to hide the button when it is
+        # disabled in production.
+        data['allow_manual_payment_confirm'] = (
+            bool(settings.ALLOW_MANUAL_PAYMENT_CONFIRM) and request.user.is_staff
+        )
         return Response(data)
 
     def put(self, request):
@@ -612,7 +622,9 @@ class LogoutView(views.APIView):
 
     def post(self, request):
         try:
-            refresh_token = request.COOKIES.get('refresh_token', '') or request.data.get('refresh')
+            # Read exclusively from the httpOnly cookie (never the request
+            # body) so a cross-site POST cannot trigger a logout via CSRF.
+            refresh_token = request.COOKIES.get('refresh_token', '')
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
@@ -775,9 +787,9 @@ class IdentityDocumentImageView(views.APIView):
                 raise Http404
             return self._serve_image(request.user, pk, side)
 
-        # Verify the signed token — it encodes "doc_pk.user_pk"
+        # Verify the signed token — it encodes "doc_pk.user_pk.side"
         try:
-            signed_value = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
+            signed_value = unsign_identity_image_token(token, max_age=300)
         except (SignatureExpired, BadSignature):
             raise Http404
 

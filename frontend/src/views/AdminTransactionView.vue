@@ -620,8 +620,8 @@ onMounted(fetchBooking)
                 </Button>
               </template>
 
-              <!-- Awaiting Payment: Confirm Payment -->
-              <template v-else-if="booking.status === 'awaiting_payment'">
+              <!-- Awaiting Payment: Confirm Payment (dev/superuser only) -->
+              <template v-else-if="booking.status === 'awaiting_payment' && auth.user?.allow_manual_payment_confirm">
                 <Button
                   class="w-full"
                   :disabled="processing"
@@ -629,6 +629,13 @@ onMounted(fetchBooking)
                 >
                   {{ processing ? '...' : 'Confirm Payment' }}
                 </Button>
+              </template>
+
+              <!-- Awaiting Payment: waiting on gateway confirmation -->
+              <template v-else-if="booking.status === 'awaiting_payment'">
+                <p class="text-xs text-zinc-400 text-center">
+                  Awaiting payment confirmation from the gateway.
+                </p>
               </template>
 
               <!-- Confirmed / Waiting for Pickup: Assign Unit + Mark Active -->

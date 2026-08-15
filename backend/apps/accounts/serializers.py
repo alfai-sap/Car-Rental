@@ -12,10 +12,12 @@ class EmailVerificationTokenGenerator:
 
     Uses Django's TimestampSigner so that verification tokens survive
     password changes.  Tokens expire after PASSWORD_RESET_TIMEOUT
-    (default 15 minutes).
+    (default 15 minutes).  A dedicated salt scopes this signer to email
+    verification only — it can never collide with identity-image or
+    snapshot-image tokens.
     """
     def __init__(self):
-        self.signer = TimestampSigner()
+        self.signer = TimestampSigner(salt='car-rental-email-verification')
 
     def make_token(self, user):
         return self.signer.sign(str(user.pk))
@@ -59,7 +61,22 @@ def _get_token_timeout():
 account_token_generator = AccountTokenGenerator()
 
 
-def _identity_image_token(doc_pk, user_pk, side):
+# ── Short-lived signed tokens (email verification / image access) ──
+# Each token purpose gets its own TimestampSigner salt so a token minted for
+# one purpose can never be replayed against another (e.g. an identity-image
+# token can never be used to verify an email address).
+
+def make_email_verification_token(user):
+    """Short-lived token for email verification (survives password changes)."""
+    return account_token_generator.make_email_verification_token(user)
+
+
+def check_email_verification_token(user, token):
+    """Validate an email-verification token."""
+    return account_token_generator.check_email_verification_token(user, token)
+
+
+def make_identity_image_token(doc_pk, user_pk, side):
     """Short-lived signed token for identity document image access (5 min).
 
     Encodes the document ID, the user ID, and the image side so that the
@@ -70,19 +87,31 @@ def _identity_image_token(doc_pk, user_pk, side):
 
     Format: "doc_pk.user_pk.side"
     """
-    return account_token_generator._email_verifier.signer.sign(f'{doc_pk}.{user_pk}.{side}')
+    signer = TimestampSigner(salt='car-rental-identity-image')
+    return signer.sign(f'{doc_pk}.{user_pk}.{side}')
 
 
-def _identity_snapshot_image_token(booking_id, user_id, doc_index, side):
+def make_identity_snapshot_image_token(booking_id, user_id, doc_index, side):
     """Short-lived signed token for booking identity-snapshot image access.
 
     Encodes the booking ID, owning user ID, document index, and image side
     so the snapshot image view can verify ownership without an
     Authorization header.  Format: "booking_id.user_id.doc_index.side"
     """
-    return account_token_generator._email_verifier.signer.sign(
-        f'{booking_id}.{user_id}.{doc_index}.{side}'
-    )
+    signer = TimestampSigner(salt='car-rental-identity-snapshot-image')
+    return signer.sign(f'{booking_id}.{user_id}.{doc_index}.{side}')
+
+
+def unsign_identity_image_token(token, max_age=300):
+    """Verify an identity-document image token, returning "doc_pk.user_pk.side"."""
+    signer = TimestampSigner(salt='car-rental-identity-image')
+    return signer.unsign(token, max_age=max_age)
+
+
+def unsign_identity_snapshot_image_token(token, max_age=300):
+    """Verify a snapshot-image token, returning "booking_id.user_id.doc_index.side"."""
+    signer = TimestampSigner(salt='car-rental-identity-snapshot-image')
+    return signer.unsign(token, max_age=max_age)
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -232,8 +261,8 @@ class IdentityDocumentSerializer(serializers.ModelSerializer):
         # Build a token that cryptographically binds the document to its owner.
         # The image view will verify ownership from the token alone — no
         # Authorization header required, so <img> tags work in the browser.
-        front_token = _identity_image_token(instance.id, instance.user_id, 'front')
-        back_token = _identity_image_token(instance.id, instance.user_id, 'back')
+        front_token = make_identity_image_token(instance.id, instance.user_id, 'front')
+        back_token = make_identity_image_token(instance.id, instance.user_id, 'back')
         if instance.front_image:
             data['front_image'] = f'/api/identity-documents/{instance.id}/image/front/?token={front_token}'
         if instance.back_image:

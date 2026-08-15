@@ -152,6 +152,39 @@ def create_checkout_session(
     }
 
 
+def expire_checkout_session(session_id: str) -> bool:
+    """Expire a live PayMongo Checkout Session.
+
+    Called when a booking is cancelled while its payment is still pending,
+    so the customer can no longer complete the hosted checkout page.
+
+    Returns True on success, False if the request failed (e.g. the session
+    was already expired, the gateway is unreachable, or the session id is
+    missing).  Failures are logged but never raised — cancelling a booking
+    must succeed even if the gateway is down.
+    """
+    if not session_id:
+        return False
+
+    url = f'{PAYMONGO_API_BASE}/checkout_sessions/{session_id}/expire'
+
+    try:
+        response = requests.post(url, headers=_headers(), timeout=10)
+    except (requests.RequestException, PayMongoError) as e:
+        logger.error('PayMongo checkout expiry request failed for %s: %s', session_id, e)
+        return False
+
+    if response.status_code not in (200, 201, 204):
+        logger.error(
+            'PayMongo checkout expiry failed for %s (HTTP %s)',
+            session_id, response.status_code,
+        )
+        return False
+
+    logger.info('PayMongo checkout session expired: session_id=%s', session_id)
+    return True
+
+
 def retrieve_payment(paymongo_payment_id: str) -> Dict[str, Any]:
     """Retrieve a payment by its PayMongo ID.
 

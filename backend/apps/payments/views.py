@@ -19,6 +19,10 @@ from apps.core import services as notify
 logger = logging.getLogger(__name__)
 
 
+class PaymentAmountMismatchError(Exception):
+    """Raised when a gateway payment amount/currency does not match the invoice."""
+
+
 def payment_gateway_enabled():
     return (
         settings.PAYMENT_PROVIDER == 'paymongo'
@@ -26,6 +30,89 @@ def payment_gateway_enabled():
         and bool(settings.PAYMONGO_SECRET_KEY)
         and bool(settings.PAYMONGO_WEBHOOK_SECRET)
     )
+
+
+def finalize_paid_payment(payment, *, amount_cents, currency, payment_method='', webhook_event_id=None):
+    """Apply a confirmed gateway payment to the local records.
+
+    Shared by the webhook and the reconciliation command so both paths
+    enforce the exact same amount/currency verification and booking
+    state transition.  Never resurrects a booking that is no longer
+    awaiting payment.
+
+    Raises PaymentAmountMismatchError when the gateway amount/currency
+    does not match the invoice (the caller decides how to respond).
+    """
+    booking = payment.booking
+
+    expected_cents = None
+    if payment.invoice:
+        expected_cents = int(payment.invoice.total * 100)
+
+    if currency != 'PHP' or (expected_cents is not None and amount_cents != expected_cents):
+        raise PaymentAmountMismatchError(
+            f'expected {expected_cents} PHP, got {amount_cents} {currency}'
+        )
+
+    payment.payment_status = Payment.STATUS_PAID
+    payment.paid_at = timezone.now()
+    payment.payment_method = payment_method or ''
+    if webhook_event_id:
+        payment.webhook_event_id = webhook_event_id
+
+    try:
+        with transaction.atomic():
+            payment.save()
+            if payment.invoice:
+                payment.invoice.invoice_status = Invoice.STATUS_PAID
+                payment.invoice.save()
+            # Only advance the booking if it is still awaiting payment.
+            # A customer could complete payment after the booking was
+            # cancelled/rejected; never resurrect it.
+            if booking.status == 'awaiting_payment':
+                booking.status = 'confirmed'
+                if booking.vehicle_unit:
+                    booking.vehicle_unit.status = 'booked'
+                    booking.vehicle_unit.save()
+                booking.save()
+    except IntegrityError:
+        raise
+
+    if booking.status == 'confirmed':
+        notify.notify_payment_successful(booking)
+        notify.notify_booking_confirmed(booking)
+    else:
+        # Payment arrived for a booking that is no longer active
+        # (e.g. it was cancelled/rejected while the customer was on
+        # the PayMongo page).  Never send a "Booking Finalized" email
+        # for a booking that was never finalized — alert support
+        # instead so a refund can be arranged.
+        notify.notify_payment_received_inactive(booking)
+
+    return booking
+
+
+def expire_pending_payments(booking):
+    """Expire every live checkout session for a booking and mark the local
+    Payment records cancelled.
+
+    Called when a booking is cancelled so the customer can no longer
+    complete payment on the hosted checkout page.  The PayMongo call is
+    best-effort: if the gateway is unreachable the local payment is still
+    marked cancelled, and the webhook's "never resurrect a cancelled
+    booking" guard remains the final line of defense.
+    """
+    from apps.payments.paymongo import expire_checkout_session
+
+    pending_payments = Payment.objects.filter(
+        booking=booking,
+        payment_status=Payment.STATUS_PENDING,
+    )
+    for payment in pending_payments:
+        if payment.checkout_session_id:
+            expire_checkout_session(payment.checkout_session_id)
+        payment.payment_status = Payment.STATUS_CANCELLED
+        payment.save(update_fields=['payment_status', 'updated_at'])
 
 
 class PaymentCreateSessionView(APIView):
@@ -85,14 +172,10 @@ class PaymentCreateSessionView(APIView):
             })
 
         # ── Determine the exact amount to charge ──
-        # It must equal what the webhook later verifies (invoice.total):
-        # booking.estimated_total plus any admin-added additional charges
-        # already recorded on the invoice.  This prevents an amount-mismatch
-        # dead-end where the customer is charged less than the invoice total.
-        existing_invoice = Invoice.objects.filter(booking=booking).first()
+        # It must equal what the webhook later verifies (invoice.total),
+        # which is the booking's immutable pricing snapshot (subtotal minus
+        # any discount).
         charge_amount = booking.estimated_total
-        if existing_invoice and (existing_invoice.additional_charges or 0) != 0:
-            charge_amount = existing_invoice.total
 
         # ── Call PayMongo FIRST before any DB writes ──
         # This prevents the booking from being left in 'awaiting_payment'
@@ -102,16 +185,19 @@ class PaymentCreateSessionView(APIView):
             try:
                 from apps.payments.paymongo import create_checkout_session, PayMongoError
 
+                from apps.core.ids import encode_id
+
                 vehicle_name = f'{booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}'
                 description = f'Rental: {vehicle_name} ({booking.pickup_date} – {booking.return_date})'
+                booking_hash_id = encode_id('booking', booking.id)
 
                 paymongo_result = create_checkout_session(
                     amount=charge_amount,
                     currency='PHP',
                     description=description,
                     payment_reference=f'PMT-{booking.booking_number}',
-                    success_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=success',
-                    cancel_url=f'{settings.FRONTEND_URL}/transactions/{booking.id}/?payment=cancelled',
+                    success_url=f'{settings.FRONTEND_URL}/transactions/{booking_hash_id}/?payment=success',
+                    cancel_url=f'{settings.FRONTEND_URL}/transactions/{booking_hash_id}/?payment=cancelled',
                     customer_email=booking.customer.email,
                     customer_name=f'{booking.customer.first_name} {booking.customer.last_name}',
                     customer_phone=booking.customer.phone or None,
@@ -137,7 +223,6 @@ class PaymentCreateSessionView(APIView):
                 booking=booking,
                 defaults={
                     'subtotal': booking.subtotal,
-                    'additional_charges': 0,
                     'discount': booking.discount_amount,
                     'total': booking.estimated_total,
                     'invoice_status': Invoice.STATUS_PENDING,
@@ -145,19 +230,17 @@ class PaymentCreateSessionView(APIView):
                 },
             )
             # Keep the rental discount/subtotal in sync with the booking's
-            # immutable pricing snapshot on re-attempts, while preserving any
-            # admin-added additional charges.  Invoice.save() recomputes
-            # `total = subtotal + additional_charges - discount`.
-            if invoice.invoice_status != Invoice.STATUS_PAID and (invoice.additional_charges or 0) == 0:
+            # immutable pricing snapshot on re-attempts.  Invoice.save()
+            # recomputes `total = subtotal - discount`.
+            if invoice.invoice_status != Invoice.STATUS_PAID:
                 invoice.subtotal = booking.subtotal
                 invoice.discount = booking.discount_amount
                 invoice.save(update_fields=['subtotal', 'discount', 'total', 'updated_at'])
 
             # The PayMongo session amount and the stored Payment.amount must
-            # match what the webhook will verify (invoice.total), otherwise a
-            # paid webhook fails amount verification.  In practice the initial
-            # amount equals invoice.total because additional_charges is 0 on
-            # checkout creation; this guard keeps the invariant explicit.
+            # match what the webhook will verify (invoice.total).  In practice
+            # the initial amount equals invoice.total because the booking's
+            # pricing snapshot is the sole source of truth for the charge.
             payment = Payment.objects.create(
                 booking=booking,
                 invoice=invoice,
@@ -169,8 +252,9 @@ class PaymentCreateSessionView(APIView):
 
             if paymongo_result:
                 payment.provider_reference = paymongo_result['paymongo_payment_id']
+                payment.checkout_session_id = paymongo_result.get('session_id', '')
                 payment.checkout_url = checkout_url
-                payment.save(update_fields=['provider_reference', 'checkout_url', 'updated_at'])
+                payment.save(update_fields=['provider_reference', 'checkout_session_id', 'checkout_url', 'updated_at'])
                 logger.info(
                     'PayMongo checkout session created for booking %s (payment %s)',
                     booking.booking_number, payment.payment_number,
@@ -330,57 +414,33 @@ class PaymentWebhookView(APIView):
         payment.webhook_event_id = event_id
 
         if event_type == 'payment.paid':
-            # ── Amount/currency verification ──
+            # ── Amount/currency verification + state transition ──
             resource_attributes = resource.get('attributes', {})
             paid_amount_cents = resource_attributes.get('amount')
             paid_currency = (resource_attributes.get('currency') or '').upper()
-            expected_cents = None
-            if payment.invoice:
-                expected_cents = int(payment.invoice.total * 100)
+            payment_method = resource_attributes.get('source', {}).get('type', '')
 
-            if paid_currency != 'PHP' or (expected_cents is not None and paid_amount_cents != expected_cents):
+            try:
+                booking = finalize_paid_payment(
+                    payment,
+                    amount_cents=paid_amount_cents,
+                    currency=paid_currency,
+                    payment_method=payment_method,
+                    webhook_event_id=event_id,
+                )
+            except PaymentAmountMismatchError as exc:
                 logger.error(
-                    'PayMongo webhook: amount mismatch for payment %s (expected %s PHP, got %s %s)',
-                    payment.payment_number, expected_cents, paid_amount_cents, paid_currency,
+                    'PayMongo webhook: amount mismatch for payment %s (%s)',
+                    payment.payment_number, exc,
                 )
                 return Response(
                     {'detail': 'Payment amount does not match the invoice.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-
-            payment.payment_status = Payment.STATUS_PAID
-            payment.paid_at = timezone.now()
-            payment.payment_method = resource_attributes.get('source', {}).get('type', '')
-
-            try:
-                with transaction.atomic():
-                    payment.save()
-                    if payment.invoice:
-                        payment.invoice.invoice_status = Invoice.STATUS_PAID
-                        payment.invoice.save()
-                    # Only advance the booking if it is still awaiting payment.
-                    # A customer could complete payment after the booking was
-                    # cancelled/rejected; never resurrect it.
-                    if booking.status == 'awaiting_payment':
-                        booking.status = 'confirmed'
-                        if booking.vehicle_unit:
-                            booking.vehicle_unit.status = 'booked'
-                            booking.vehicle_unit.save()
-                        booking.save()
             except IntegrityError:
                 logger.info('PayMongo webhook: duplicate event %s (already recorded)', event_id)
                 return Response({'detail': 'Event already processed.'})
 
-            if booking.status == 'confirmed':
-                notify.notify_payment_successful(booking)
-                notify.notify_booking_confirmed(booking)
-            else:
-                # Payment arrived for a booking that is no longer active
-                # (e.g. it was cancelled/rejected while the customer was on
-                # the PayMongo page).  Never send a "Booking Finalized" email
-                # for a booking that was never finalized — alert support
-                # instead so a refund can be arranged.
-                notify.notify_payment_received_inactive(booking)
             logger.info(
                 'PayMongo webhook: payment %s confirmed for booking %s',
                 payment.payment_number, booking.booking_number,

@@ -2,9 +2,7 @@ import logging
 import os
 import uuid as uuid_lib
 
-from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from django.core.signing import SignatureExpired, BadSignature
 from django.db import transaction
 from django.http import FileResponse, Http404
@@ -21,11 +19,12 @@ from apps.bookings.models import Booking, AssignmentHistory
 from apps.bookings.serializers import (
     BookingSerializer, BookingStatusUpdateSerializer,
     DashboardBookingSerializer, AdminDashboardBookingSerializer,
-    AssignmentHistorySerializer, UnitAssignmentSerializer,
+    AssignmentHistorySerializer,
 )
 from apps.core import services as notify
 from apps.core.services import create_audit_log, compute_rental_pricing
 from apps.core.ids import HashedIdLookupMixin
+from apps.core.storage import private_identity_storage
 from apps.vehicles.models import Vehicle, VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -44,17 +43,19 @@ SNAPSHOT_IMAGE_DIR = 'identity_docs/snapshots'
 
 
 def _copy_snapshot_image(image_field):
-    """Copy an uploaded identity image into the snapshot directory.
+    """Copy an uploaded identity image into the private snapshot directory.
 
     Returns the relative storage name of the copy, or None on failure.
-    The copy is immutable — it is never touched by profile edits.
+    The copy is immutable — it is never touched by profile edits — and lives
+    in the private identity storage, never in the public MEDIA_ROOT.
     """
     try:
+        storage = private_identity_storage()
         ext = os.path.splitext(image_field.name)[1] or '.jpg'
         name = f'{SNAPSHOT_IMAGE_DIR}/{uuid_lib.uuid4().hex}{ext}'
         with image_field.open('rb') as fh:
             content = fh.read()
-        default_storage.save(name, ContentFile(content))
+        storage.save(name, ContentFile(content))
         return name
     except Exception as e:
         logger.exception('Failed to copy identity snapshot image: %s', e)
@@ -214,6 +215,14 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
                 booking.vehicle_unit.save()
             booking.save()
 
+        # Expire any live PayMongo checkout session so the customer cannot
+        # complete payment after cancelling.  Best-effort and outside the
+        # transaction (it performs network I/O); the webhook's "never
+        # resurrect a cancelled booking" guard remains the last resort.
+        if before['status'] in ('approved', 'awaiting_payment'):
+            from apps.payments.views import expire_pending_payments
+            expire_pending_payments(booking)
+
         # If cancelled by an admin, create an audit log
         if request.user.is_staff and booking.customer != request.user:
             create_audit_log(
@@ -369,9 +378,19 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
                 {'detail': 'Only confirmed bookings can be marked waiting.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        before = {'status': booking.status}
-        booking.status = 'waiting_for_pickup'
-        booking.save()
+
+        with transaction.atomic():
+            # Lock the row to prevent concurrent admin actions
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status != 'confirmed':
+                return Response(
+                    {'detail': 'Only confirmed bookings can be marked waiting.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            before = {'status': booking.status}
+            booking.status = 'waiting_for_pickup'
+            booking.save()
+
         create_audit_log(
             actor=request.user, action='booking_marked_waiting', booking=booking,
             summary=f'Marked booking {booking.booking_number} as waiting for pickup',
@@ -429,6 +448,11 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
             )
 
         with transaction.atomic():
+            # Lock the row to prevent concurrent admin actions
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status != 'active':
+                return Response({'detail': 'Only active bookings can be marked complete.'}, status=status.HTTP_400_BAD_REQUEST)
+
             before = {'status': booking.status, 'return_unit_status': None}
             booking.status = 'completed'
             booking.return_unit_status = return_unit_status
@@ -691,7 +715,7 @@ class IdentitySnapshotImageView(APIView):
     throttle_scope = 'identity_doc_image'
 
     def get(self, request, pk, doc_index, side):
-        from apps.accounts.serializers import account_token_generator
+        from apps.accounts.serializers import unsign_identity_snapshot_image_token
 
         token = request.query_params.get('token', '')
         if not token:
@@ -700,7 +724,7 @@ class IdentitySnapshotImageView(APIView):
             return self._serve_authorized(request.user, pk, doc_index, side)
 
         try:
-            signed_value = account_token_generator._email_verifier.signer.unsign(token, max_age=300)
+            signed_value = unsign_identity_snapshot_image_token(token, max_age=300)
         except (SignatureExpired, BadSignature):
             raise Http404
 
@@ -749,7 +773,7 @@ class IdentitySnapshotImageView(APIView):
             raise Http404
 
         try:
-            file_handle = default_storage.open(name)
+            file_handle = private_identity_storage().open(name)
         except (FileNotFoundError, OSError, ValueError):
             raise Http404
 

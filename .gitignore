@@ -37,6 +37,7 @@ python_env/
 # User Uploads & Media
 # ============================================
 media/
+private_media/
 uploads/
 !media/.gitkeep
 !uploads/.gitkeep

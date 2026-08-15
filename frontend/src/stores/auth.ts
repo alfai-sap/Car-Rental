@@ -16,6 +16,7 @@ interface User {
   booking_eligible?: boolean
   profile_locked?: boolean
   identity_locked?: boolean
+  allow_manual_payment_confirm?: boolean
 }
 
 export const useAuthStore = defineStore('auth', () => {

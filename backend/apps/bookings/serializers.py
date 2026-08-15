@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from apps.bookings.models import Booking, AssignmentHistory
-from apps.accounts.serializers import _identity_image_token, _identity_snapshot_image_token
+from apps.accounts.serializers import make_identity_image_token, make_identity_snapshot_image_token
 from apps.core.ids import HashedIdField
 from apps.vehicles.models import VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
@@ -70,8 +70,8 @@ class BookingSerializer(serializers.ModelSerializer):
         docs = obj.customer.identity_documents.all()
         result = []
         for doc in docs:
-            front_token = _identity_image_token(doc.id, doc.user_id, 'front')
-            back_token = _identity_image_token(doc.id, doc.user_id, 'back')
+            front_token = make_identity_image_token(doc.id, doc.user_id, 'front')
+            back_token = make_identity_image_token(doc.id, doc.user_id, 'back')
             item = {
                 'id': doc.id,
                 'document_type': doc.document_type,
@@ -102,11 +102,11 @@ class BookingSerializer(serializers.ModelSerializer):
                 'index': doc.get('index', idx),
                 'front_image': (
                     f'/api/bookings/{obj.id}/identity-snapshot-image/{idx}/front/?token='
-                    f'{_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "front")}'
+                    f'{make_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "front")}'
                 ) if front else None,
                 'back_image': (
                     f'/api/bookings/{obj.id}/identity-snapshot-image/{idx}/back/?token='
-                    f'{_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "back")}'
+                    f'{make_identity_snapshot_image_token(obj.id, obj.customer_id, idx, "back")}'
                 ) if back else None,
             }
             enriched.append(item)
@@ -307,9 +307,3 @@ class AssignmentHistorySerializer(serializers.ModelSerializer):
         if obj.changed_by:
             return f"{obj.changed_by.first_name} {obj.changed_by.last_name}"
         return None
-
-
-class UnitAssignmentSerializer(serializers.Serializer):
-    """Input serializer for unit assignment."""
-    unit_id = serializers.IntegerField(required=True)
-    reason = serializers.CharField(required=False, default='Initial assignment')
