@@ -184,6 +184,13 @@ def expire_pending_payments(booking):
         payment.payment_status = Payment.STATUS_CANCELLED
         payment.save(update_fields=['payment_status', 'updated_at'])
 
+    # The invoice must mirror the payment: a cancelled booking with no
+    # payable amount should not leave a dangling 'pending' invoice.
+    invoice = Invoice.objects.filter(booking=booking).first()
+    if invoice and invoice.invoice_status == Invoice.STATUS_PENDING:
+        invoice.invoice_status = Invoice.STATUS_CANCELLED
+        invoice.save(update_fields=['invoice_status', 'updated_at'])
+
 
 class PaymentCreateSessionView(APIView):
     permission_classes = [IsAuthenticated]

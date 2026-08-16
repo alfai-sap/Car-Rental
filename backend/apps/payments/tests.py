@@ -137,6 +137,38 @@ class PaymentAPITests(TestCase):
 		li = hmac.new(b'test-webhook-secret', signed, hashlib.sha256).hexdigest()
 		return event_data, {'HTTP_PAYMONGO_SIGNATURE': f't={ts},te={expiry},li={li}'}
 
+	def test_expire_pending_payments_cancels_invoice(self):
+		"""Cancelling a booking must mark its pending invoice as cancelled too.
+
+		Regression: a customer who opens a checkout session and cancels the
+		booking without paying left the invoice stuck in 'pending' even though
+		the Payment was correctly cancelled.
+		"""
+		invoice = Invoice.objects.create(
+			booking=self.booking,
+			subtotal=self.booking.estimated_total,
+			discount=0,
+			total=self.booking.estimated_total,
+			invoice_status=Invoice.STATUS_PENDING,
+		)
+		Payment.objects.create(
+			booking=self.booking,
+			invoice=invoice,
+			provider=Payment.PROVIDER_PAYMONGO,
+			provider_reference='pay_cancel_1',
+			amount=invoice.total,
+			currency='PHP',
+			payment_status=Payment.STATUS_PENDING,
+		)
+
+		from apps.payments.views import expire_pending_payments
+		expire_pending_payments(self.booking)
+
+		invoice.refresh_from_db()
+		payment = Payment.objects.get(provider_reference='pay_cancel_1')
+		self.assertEqual(payment.payment_status, Payment.STATUS_CANCELLED)
+		self.assertEqual(invoice.invoice_status, Invoice.STATUS_CANCELLED)
+
 	def test_webhook_payment_for_cancelled_booking_notifies_support(self):
 		"""A payment landing on a cancelled booking must NOT send a
 		'Booking Finalized' email — it should alert support instead."""
