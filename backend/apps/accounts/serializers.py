@@ -102,13 +102,18 @@ def make_identity_snapshot_image_token(booking_id, user_id, doc_index, side):
     return signer.sign(f'{booking_id}.{user_id}.{doc_index}.{side}')
 
 
-def unsign_identity_image_token(token, max_age=300):
+# Signed identity/snapshot image URLs are bearer tokens for PII.  Keep the
+# exposure window short: tokens expire 60 seconds after being minted.
+IMAGE_TOKEN_MAX_AGE = 60
+
+
+def unsign_identity_image_token(token, max_age=IMAGE_TOKEN_MAX_AGE):
     """Verify an identity-document image token, returning "doc_pk.user_pk.side"."""
     signer = TimestampSigner(salt='car-rental-identity-image')
     return signer.unsign(token, max_age=max_age)
 
 
-def unsign_identity_snapshot_image_token(token, max_age=300):
+def unsign_identity_snapshot_image_token(token, max_age=IMAGE_TOKEN_MAX_AGE):
     """Verify a snapshot-image token, returning "booking_id.user_id.doc_index.side"."""
     signer = TimestampSigner(salt='car-rental-identity-snapshot-image')
     return signer.unsign(token, max_age=max_age)

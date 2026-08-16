@@ -102,7 +102,8 @@ class PaymentAPITests(TestCase):
 
 		response = self.client.get('/api/payments/history/')
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data['count'], 1)
+		self.assertEqual(len(response.data['results']), 1)
 
 	def test_payment_detail_authorization(self):
 		self._login(self.customer)

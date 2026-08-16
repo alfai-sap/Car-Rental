@@ -46,6 +46,8 @@ interface VehicleImage {
 
 interface Booking {
   id: number
+  hash_id: string
+  vehicle_hash_id: string
   booking_number: string
   customer: number
   customer_email: string
@@ -174,6 +176,7 @@ function currentStepIndex(status: string): number {
     case 'approved': return 2
     case 'awaiting_payment': return 2
     case 'confirmed': return 3
+    case 'waiting_for_pickup': return 3
     case 'active': return 4
     case 'completed': return 6
     case 'rejected': return 1
@@ -215,7 +218,7 @@ async function approveBooking() {
   if (!booking.value) return
   processing.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/approve/`)
+    await api.post(`/bookings/${booking.value.hash_id}/approve/`)
     await fetchBooking()
   } finally { processing.value = false }
 }
@@ -253,7 +256,7 @@ async function rejectBooking() {
   if (!booking.value || !canConfirmReject.value) return
   processing.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/reject/`, { rejection_reason: rejectReasonText.value })
+    await api.post(`/bookings/${booking.value.hash_id}/reject/`, { rejection_reason: rejectReasonText.value })
     showRejectDialog.value = false
     showRejectConfirmModal.value = false
     rejectReasonType.value = ''
@@ -266,7 +269,7 @@ async function confirmPayment() {
   if (!booking.value) return
   processing.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/confirm/`)
+    await api.post(`/bookings/${booking.value.hash_id}/confirm/`)
     showConfirmPaymentModal.value = false
     await fetchBooking()
   } finally { processing.value = false }
@@ -276,7 +279,7 @@ async function markActive() {
   if (!booking.value) return
   processing.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/mark-active/`)
+    await api.post(`/bookings/${booking.value.hash_id}/mark-active/`)
     showMarkActiveModal.value = false
     await fetchBooking()
   } finally { processing.value = false }
@@ -288,7 +291,7 @@ async function completeTransaction() {
   if (!['available', 'maintenance', 'inactive'].includes(status)) return
   completingTransaction.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/mark-complete/`, { return_unit_status: status })
+    await api.post(`/bookings/${booking.value.hash_id}/mark-complete/`, { return_unit_status: status })
     await fetchBooking()
     showReturnDialog.value = false
   } finally { completingTransaction.value = false }
@@ -301,7 +304,7 @@ async function loadAvailableUnits() {
   loadingUnits.value = true
   showUnitForm.value = true
   try {
-    const response = await api.get(`/vehicles/${booking.value.vehicle}/units/`)
+    const response = await api.get(`/vehicles/${booking.value.vehicle_hash_id}/units/`)
     // DRF pagination wraps results in { count, results, ... }
     const data = Array.isArray(response.data) ? response.data : (response.data.results || [])
     availableUnits.value = (data as UnitOption[]).filter(u => u.status === 'available')
@@ -313,7 +316,7 @@ async function assignUnit() {
   if (!booking.value || !selectedUnitId.value) return
   assigningUnit.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/assign-unit/`, {
+    await api.post(`/bookings/${booking.value.hash_id}/assign-unit/`, {
       unit_id: selectedUnitId.value,
       reason: assignmentReason.value || 'Admin assignment',
     })
@@ -329,7 +332,7 @@ async function loadAssignmentHistory() {
   if (!booking.value) return
   loadingHistory.value = true
   try {
-    const response = await api.get(`/bookings/${booking.value.id}/assignment-history/`)
+    const response = await api.get(`/bookings/${booking.value.hash_id}/assignment-history/`)
     assignmentHistory.value = response.data as AssignmentEntry[]
   } catch { assignmentHistory.value = [] }
   finally { loadingHistory.value = false }
@@ -360,7 +363,7 @@ async function checkPaymentStatus() {
   if (!booking.value) return
   processing.value = true
   try {
-    const response = await api.post(`/bookings/${booking.value.id}/check-payment/`)
+    const response = await api.post(`/bookings/${booking.value.hash_id}/check-payment/`)
     booking.value = response.data
   } catch { /* keep current state on failure */ }
   finally { processing.value = false }
@@ -374,6 +377,7 @@ const stepHint = computed(() => {
     case 'approved': return 'Customer needs to pay'
     case 'awaiting_payment': return 'Awaiting payment confirmation'
     case 'confirmed': return 'Ready for pickup'
+    case 'waiting_for_pickup': return 'Unit assigned — ready for pickup'
     case 'active': return 'Vehicle is currently rented'
     case 'completed': return 'Transaction complete'
     case 'rejected': return `Rejected: ${booking.value.rejection_reason || 'No reason'}`
@@ -542,6 +546,7 @@ onMounted(fetchBooking)
                       'bg-blue-100 text-blue-800': booking.status === 'approved',
                       'bg-purple-100 text-purple-800': booking.status === 'awaiting_payment',
                       'bg-green-100 text-green-800': booking.status === 'confirmed',
+                      'bg-cyan-100 text-cyan-800': booking.status === 'waiting_for_pickup',
                       'bg-emerald-100 text-emerald-800': booking.status === 'active',
                       'bg-zinc-100 text-zinc-800': booking.status === 'completed',
                       'bg-red-100 text-red-800': ['cancelled', 'rejected'].includes(booking.status),

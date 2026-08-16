@@ -30,17 +30,18 @@ class Booking(models.Model):
     )
     vehicle = models.ForeignKey(
         'vehicles.Vehicle',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         related_name='bookings',
-        help_text='Original vehicle.  Preserved for audit even if the vehicle is later removed from the fleet.',
+        help_text='Original vehicle.  Deleting a vehicle that is referenced by a booking is blocked.',
     )
     vehicle_unit = models.ForeignKey(
         'vehicles.VehicleUnit',
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='bookings',
+        help_text='Assigned unit.  Deleting a unit referenced by a booking is blocked.',
     )
     pickup_date = models.DateField()
     return_date = models.DateField()
@@ -117,9 +118,9 @@ class AssignmentHistory(models.Model):
         related_name='previous_assignments',
     )
     new_unit = models.ForeignKey(
-        'vehicles.VehicleUnit', on_delete=models.SET_NULL, null=True,
+        'vehicles.VehicleUnit', on_delete=models.PROTECT, null=True,
         related_name='new_assignments',
-        help_text='Assigned unit. Preserved for audit even if the unit is later removed.',
+        help_text='Assigned unit.  Deleting a unit referenced by assignment history is blocked.',
     )
     reason = models.CharField(max_length=255)
     changed_by = models.ForeignKey(

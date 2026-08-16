@@ -82,10 +82,12 @@ const unitForm = ref({ plate_number: '', status: 'available', mileage: 0, notes:
 const unitFormError = ref('')
 const unitFormLoading = ref(false)
 const deleteUnitId = ref<number | null>(null)
+const deleteUnitError = ref('')
 
 // ── Delete vehicle ──
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
+const deleteError = ref('')
 
 const isNew = computed(() => route.params.id === 'new')
 
@@ -201,11 +203,13 @@ async function saveVehicleInfo() {
 async function deleteVehicle() {
   if (isNew.value) return
   deleting.value = true
+  deleteError.value = ''
   try {
     await api.delete(`/vehicles/${route.params.id}/`)
     router.push({ name: 'admin-vehicles' })
-  } catch { /* ignore */ }
-  finally { deleting.value = false }
+  } catch (e: any) {
+    deleteError.value = e?.response?.data?.detail || 'Unable to delete this vehicle.'
+  } finally { deleting.value = false }
 }
 
 // ── Unit CRUD ──
@@ -261,11 +265,14 @@ async function submitUnitForm() {
 }
 
 async function deleteUnit(unitId: number) {
+  deleteUnitError.value = ''
   try {
     await api.delete(`/vehicles/${route.params.id}/units/${unitId}/`)
     deleteUnitId.value = null
     await fetchUnits()
-  } catch { /* ignore */ }
+  } catch (e: any) {
+    deleteUnitError.value = e?.response?.data?.detail || 'Unable to delete this unit.'
+  }
 }
 
 async function deleteImage(imageId: number) {
@@ -624,6 +631,7 @@ function unitStatusBadge(status: string): string {
         <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Delete Vehicle</h3>
           <p class="text-sm text-zinc-500">Are you sure? This will also delete all associated units and images.</p>
+          <p v-if="deleteError" class="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">{{ deleteError }}</p>
           <div class="flex gap-2 pt-2">
             <Button variant="ghost" class="flex-1" @click="showDeleteConfirm = false">Cancel</Button>
             <Button class="flex-1 bg-red-600 hover:bg-red-700 text-white" :disabled="deleting" @click="deleteVehicle">
@@ -641,6 +649,7 @@ function unitStatusBadge(status: string): string {
         <div class="relative bg-white rounded-lg shadow-xl max-w-sm w-full p-6 space-y-4">
           <h3 class="text-lg font-semibold text-zinc-900">Delete Unit</h3>
           <p class="text-sm text-zinc-500">Are you sure you want to remove this unit?</p>
+          <p v-if="deleteUnitError" class="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">{{ deleteUnitError }}</p>
           <div class="flex gap-2 pt-2">
             <Button variant="ghost" class="flex-1" @click="deleteUnitId = null">Cancel</Button>
             <Button class="flex-1 bg-red-600 hover:bg-red-700 text-white" @click="deleteUnit(deleteUnitId!)">Delete</Button>

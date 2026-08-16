@@ -20,6 +20,18 @@ const loading = ref(false)
 const googleLoading = ref(false)
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
+// ── Redirect sanitizer ──
+// Only accept internal, single-slash-prefixed paths.  Reject values like
+// "//evil.com" and "https://..." so a crafted ?redirect= cannot produce an
+// external navigation, even if a future router change interprets it literally.
+function safeRedirect(raw: unknown): string {
+  const value = typeof raw === 'string' ? raw : ''
+  if (value.startsWith('/') && !value.startsWith('//')) {
+    return value
+  }
+  return '/'
+}
+
 // ── Google Sign-In (OIDC) ──
 declare global {
   interface Window {
@@ -55,8 +67,7 @@ async function handleGoogleResponse(credential: string) {
   error.value = ''
   try {
     await auth.loginWithGoogle(credential)
-    const redirect = (route.query.redirect as string) || '/'
-    router.push(redirect)
+    router.push(safeRedirect(route.query.redirect))
   } catch (err: unknown) {
     const data = (err as { response?: { data?: { detail?: string } } })?.response?.data
     error.value = data?.detail || 'Google Sign-In failed. Please try again.'
@@ -99,8 +110,7 @@ async function handleLogin() {
   error.value = ''
   try {
     await auth.login(email.value, password.value)
-    const redirect = (route.query.redirect as string) || '/'
-    router.push(redirect)
+    router.push(safeRedirect(route.query.redirect))
   } catch (err: unknown) {
     const response = (err as { response?: { data?: { detail?: string; email?: string[]; password?: string[] } } })?.response
     const data = response?.data

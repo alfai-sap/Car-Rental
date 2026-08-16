@@ -1,5 +1,7 @@
-from rest_framework import viewsets, filters
+from rest_framework import viewsets, filters, status
 from rest_framework.permissions import AllowAny, IsAdminUser, SAFE_METHODS
+from rest_framework.response import Response
+from django.db.models.deletion import ProtectedError
 from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.core.ids import HashedIdLookupMixin
@@ -45,6 +47,18 @@ class VehicleViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
             return Vehicle.objects.prefetch_related('images').all()
         return qs
 
+    def destroy(self, request, *args, **kwargs):
+        """Block deletion of vehicles referenced by bookings (DB PROTECT)."""
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {'detail': 'This vehicle cannot be deleted because it is referenced by one or more bookings.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class VehicleImageViewSet(viewsets.ModelViewSet):
     queryset = VehicleImage.objects.all()
@@ -84,3 +98,15 @@ class VehicleUnitViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(vehicle_id=self._vehicle_pk())
+
+    def destroy(self, request, *args, **kwargs):
+        """Block deletion of units referenced by bookings/assignment history (DB PROTECT)."""
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {'detail': 'This unit cannot be deleted because it is assigned to one or more bookings.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)

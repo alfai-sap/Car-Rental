@@ -25,6 +25,7 @@ from apps.core import services as notify
 from apps.core.services import create_audit_log, compute_rental_pricing
 from apps.core.ids import HashedIdLookupMixin
 from apps.core.storage import private_identity_storage
+from apps.core.throttles import IdentityImageThrottle
 from apps.vehicles.models import Vehicle, VehicleUnit, UNIT_UNAVAILABLE_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,19 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
 
     # ── Customer actions ──
 
+    def get_throttles(self):
+        """Apply the payment-checkout throttle to the ``check-payment`` action.
+
+        ``check_payment`` triggers an outbound PayMongo API call per request,
+        so it must be rate-limited like the checkout endpoint itself.  The
+        ScopedRateThrottle in DEFAULT_THROTTLE_CLASSES reads
+        ``view.throttle_scope`` at request time, so setting it here scopes
+        exactly this action without throttling other booking endpoints.
+        """
+        if self.action == 'check_payment':
+            self.throttle_scope = 'payment_checkout'
+        return super().get_throttles()
+
     @action(detail=True, methods=['post'], url_path='check-payment')
     def check_payment(self, request, pk=None):
         """Re-check a pending payment against the gateway.
@@ -226,12 +240,14 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
         # Allow both the booking owner and staff to cancel
         if booking.customer != request.user and not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
-        if booking.status not in ['pending_approval', 'approved', 'awaiting_payment']:
-            return Response({'detail': 'This booking cannot be cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        before = {'status': booking.status}
 
         with transaction.atomic():
+            # Lock the row to prevent concurrent cancel/approve races.
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+            if booking.status not in ['pending_approval', 'approved', 'awaiting_payment']:
+                return Response({'detail': 'This booking cannot be cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            before = {'status': booking.status}
             booking.status = 'cancelled'
             reason = request.data.get('cancellation_reason', '')
             if reason:
@@ -515,7 +531,13 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
         if not unit_id:
             return Response({'detail': 'unit_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        try:
+            unit_id = int(unit_id)
+        except (TypeError, ValueError):
+            return Response({'detail': 'unit_id must be a valid integer.'}, status=status.HTTP_400_BAD_REQUEST)
+
         before = {
+            'status': booking.status,
             'unit_plate': booking.vehicle_unit.plate_number if booking.vehicle_unit else None,
         }
 
@@ -535,6 +557,10 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
             previous_plate = previous_unit.plate_number if previous_unit else None
 
             booking.vehicle_unit = unit
+            # Assigning a unit to a confirmed booking reserves it for the
+            # customer — the booking advances to waiting_for_pickup.
+            if booking.status == 'confirmed':
+                booking.status = 'waiting_for_pickup'
             booking.save()
 
             unit.status = 'booked'
@@ -552,7 +578,7 @@ class BookingViewSet(HashedIdLookupMixin, viewsets.ModelViewSet):
                 changed_by=request.user,
             )
 
-            after = {'unit_plate': unit.plate_number}
+            after = {'status': booking.status, 'unit_plate': unit.plate_number}
 
         action_type = 'unit_changed' if previous_plate else 'unit_assigned'
         create_audit_log(
@@ -616,7 +642,15 @@ class AvailabilityView(viewsets.ViewSet):
             return Response({'available': False, 'reason': 'Start date cannot be in the past.'})
 
         try:
-            vehicle = Vehicle.objects.get(pk=vehicle_id)
+            vehicle_pk = int(vehicle_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'available': False, 'reason': 'Invalid vehicle_id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            vehicle = Vehicle.objects.get(pk=vehicle_pk)
         except Vehicle.DoesNotExist:
             return Response({'available': False, 'reason': 'Vehicle not found.'})
 
@@ -740,6 +774,9 @@ class IdentitySnapshotImageView(APIView):
     """
     permission_classes = [AllowAny]
     throttle_scope = 'identity_doc_image'
+    # Per-user throttle keyed on the signed token's owner (not just the IP),
+    # so a single leaked URL cannot be scraped from many machines.
+    throttle_classes = [IdentityImageThrottle]
 
     def get(self, request, pk, doc_index, side):
         from apps.accounts.serializers import unsign_identity_snapshot_image_token
@@ -751,7 +788,7 @@ class IdentitySnapshotImageView(APIView):
             return self._serve_authorized(request.user, pk, doc_index, side)
 
         try:
-            signed_value = unsign_identity_snapshot_image_token(token, max_age=300)
+            signed_value = unsign_identity_snapshot_image_token(token)
         except (SignatureExpired, BadSignature):
             raise Http404
 

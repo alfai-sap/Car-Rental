@@ -55,7 +55,7 @@ const summary = ref<AdminSummary | null>(null)
 const bookings = ref<AdminBookingItem[]>([])
 const expandedId = ref<number | null>(null)
 const searchQuery = ref('')
-const processingId = ref<number | null>(null)
+const processingId = ref<string | null>(null)
 const rejectReason = ref('')
 const showRejectDialog = ref<number | null>(null)
 
@@ -146,6 +146,7 @@ function statusBadgeClass(status: string): string {
     case 'approved': return 'bg-blue-100 text-blue-800'
     case 'awaiting_payment': return 'bg-purple-100 text-purple-800'
     case 'confirmed': return 'bg-green-100 text-green-800'
+    case 'waiting_for_pickup': return 'bg-cyan-100 text-cyan-800'
     case 'active': return 'bg-emerald-100 text-emerald-800'
     case 'completed': return 'bg-zinc-100 text-zinc-800'
     case 'cancelled': return 'bg-red-100 text-red-800'
@@ -174,63 +175,15 @@ function toggleExpanded(id: number) {
   expandedId.value = expandedId.value === id ? null : id
 }
 
-async function approveBooking(bookingId: number) {
-  processingId.value = bookingId
-  try {
-    await api.post(`/bookings/${bookingId}/approve/`)
-    await fetchDashboard()
-  } catch {
-    // ignore
-  } finally {
-    processingId.value = null
-  }
-}
-
-async function rejectBooking(bookingId: number) {
+async function rejectBooking(bookingHashId: string) {
   if (!rejectReason.value.trim()) return
-  processingId.value = bookingId
+  processingId.value = bookingHashId
   try {
-    await api.post(`/bookings/${bookingId}/reject/`, {
+    await api.post(`/bookings/${bookingHashId}/reject/`, {
       rejection_reason: rejectReason.value,
     })
     showRejectDialog.value = null
     rejectReason.value = ''
-    await fetchDashboard()
-  } catch {
-    // ignore
-  } finally {
-    processingId.value = null
-  }
-}
-
-async function confirmBooking(bookingId: number) {
-  processingId.value = bookingId
-  try {
-    await api.post(`/bookings/${bookingId}/confirm/`)
-    await fetchDashboard()
-  } catch {
-    // ignore
-  } finally {
-    processingId.value = null
-  }
-}
-
-async function markActive(bookingId: number) {
-  processingId.value = bookingId
-  try {
-    await api.post(`/bookings/${bookingId}/mark-active/`)
-    await fetchDashboard()
-  } catch {
-    // ignore
-  } finally {
-    processingId.value = null
-  }
-}
-
-async function markComplete(bookingId: number) {
-  processingId.value = bookingId
-  try {
-    await api.post(`/bookings/${bookingId}/mark-complete/`)
     await fetchDashboard()
   } catch {
     // ignore
@@ -492,11 +445,11 @@ onMounted(async () => {
                           </Button>
                           <Button
                             size="sm"
-                            :disabled="!rejectReason.trim() || processingId === booking.id"
-                            @click="rejectBooking(booking.id)"
+                            :disabled="!rejectReason.trim() || processingId === booking.hash_id"
+                            @click="rejectBooking(booking.hash_id)"
                             class="text-xs h-7 bg-red-600 hover:bg-red-700"
                           >
-                            {{ processingId === booking.id ? '...' : 'Confirm Reject' }}
+                            {{ processingId === booking.hash_id ? '...' : 'Confirm Reject' }}
                           </Button>
                         </div>
                       </div>

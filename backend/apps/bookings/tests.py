@@ -374,6 +374,44 @@ class BookingAPITests(TestCase):
         response = self.client.post(f'/api/bookings/{booking_id}/approve/')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # ── Unit assignment auto-advances confirmed → waiting_for_pickup ──
+
+    def test_assign_unit_to_confirmed_booking_advances_to_waiting(self):
+        """Assigning a unit to a confirmed booking advances it to waiting_for_pickup."""
+        self._login_as(self.customer)
+        create_resp = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        booking_id = create_resp.data['id']
+
+        # Force the booking into confirmed (payment already handled upstream).
+        booking = Booking.objects.get(pk=booking_id)
+        booking.status = 'confirmed'
+        booking.save(update_fields=['status', 'updated_at'])
+
+        self._login_as(self.admin)
+        response = self.client.post(f'/api/bookings/{booking_id}/assign-unit/', {
+            'unit_id': VehicleUnit.objects.filter(vehicle=booking.vehicle).first().pk,
+            'reason': 'Test assignment',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'waiting_for_pickup')
+
+    def test_assign_unit_to_awaiting_payment_stays_awaiting(self):
+        """Assigning a unit to an awaiting-payment booking must NOT advance status."""
+        self._login_as(self.customer)
+        create_resp = self.client.post('/api/bookings/', self.valid_payload, format='json')
+        booking_id = create_resp.data['id']
+
+        self._login_as(self.admin)
+        self.client.post(f'/api/bookings/{booking_id}/approve/')  # → awaiting_payment
+
+        booking = Booking.objects.get(pk=booking_id)
+        response = self.client.post(f'/api/bookings/{booking_id}/assign-unit/', {
+            'unit_id': VehicleUnit.objects.filter(vehicle=booking.vehicle).first().pk,
+            'reason': 'Test assignment',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'awaiting_payment')
+
 
 class AvailabilityTests(TestCase):
     def setUp(self):

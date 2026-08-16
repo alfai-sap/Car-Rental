@@ -9,12 +9,14 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.bookings.models import Booking
 from apps.payments.models import Invoice, Payment
 from apps.core import services as notify
+from apps.core.ids import decode_id, encode_id, InvalidId
 
 logger = logging.getLogger(__name__)
 
@@ -197,13 +199,23 @@ class PaymentCreateSessionView(APIView):
     throttle_scope = 'payment_checkout'
 
     def post(self, request):
-        booking_id = request.data.get('booking_id')
-        if not booking_id:
-            return Response({'detail': 'booking_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Accept the opaque signed ``booking_hash_id`` (preferred) with a
+        # legacy numeric ``booking_id`` fallback for backwards compatibility.
+        # Raw sequential PKs are rejected in production once
+        # ALLOW_LEGACY_NUMERIC_IDS is disabled, keeping this endpoint
+        # consistent with the hashed-ID strategy used across bookings.
+        booking_ref = request.data.get('booking_hash_id') or request.data.get('booking_id')
+        if not booking_ref:
+            return Response({'detail': 'booking_hash_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            booking_pk = decode_id('booking', booking_ref)
+        except InvalidId:
+            raise Http404
 
         booking = get_object_or_404(
             Booking.objects.select_related('customer', 'vehicle'),
-            pk=booking_id,
+            pk=booking_pk,
         )
 
         if booking.customer_id != request.user.id and not request.user.is_staff:
@@ -358,11 +370,17 @@ class PaymentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        payment = get_object_or_404(Payment.objects.select_related('booking', 'invoice'), pk=pk)
+        try:
+            payment_pk = decode_id('payment', pk)
+        except InvalidId:
+            raise Http404
+
+        payment = get_object_or_404(Payment.objects.select_related('booking', 'invoice'), pk=payment_pk)
         if payment.booking.customer_id != request.user.id and not request.user.is_staff:
             return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
         return Response({
             'id': payment.id,
+            'hash_id': encode_id('payment', payment.id),
             'payment_number': payment.payment_number,
             'booking': payment.booking_id,
             'invoice': payment.invoice_id,
@@ -381,30 +399,38 @@ class PaymentDetailView(APIView):
 
 class PaymentHistoryView(APIView):
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+
+    @staticmethod
+    def _payment_to_dict(payment):
+        return {
+            'id': payment.id,
+            'payment_number': payment.payment_number,
+            'booking': payment.booking_id,
+            'booking_number': payment.booking.booking_number,
+            'invoice_number': payment.invoice.invoice_number if payment.invoice else None,
+            'invoice_total': str(payment.invoice.total) if payment.invoice else None,
+            'provider': payment.provider,
+            'amount': str(payment.amount),
+            'currency': payment.currency,
+            'payment_status': payment.payment_status,
+            'paid_at': payment.paid_at,
+            'created_at': payment.created_at,
+            'updated_at': payment.updated_at,
+        }
 
     def get(self, request):
         queryset = Payment.objects.select_related('booking', 'invoice').order_by('-created_at')
         if not request.user.is_staff:
             queryset = queryset.filter(booking__customer=request.user)
 
-        return Response([
-            {
-                'id': payment.id,
-                'payment_number': payment.payment_number,
-                'booking': payment.booking_id,
-                'booking_number': payment.booking.booking_number,
-                'invoice_number': payment.invoice.invoice_number if payment.invoice else None,
-                'invoice_total': str(payment.invoice.total) if payment.invoice else None,
-                'provider': payment.provider,
-                'amount': str(payment.amount),
-                'currency': payment.currency,
-                'payment_status': payment.payment_status,
-                'paid_at': payment.paid_at,
-                'created_at': payment.created_at,
-                'updated_at': payment.updated_at,
-            }
-            for payment in queryset
-        ])
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        if page is not None:
+            return paginator.get_paginated_response(
+                [self._payment_to_dict(payment) for payment in page]
+            )
+        return Response([self._payment_to_dict(payment) for payment in queryset])
 
 
 class PaymentWebhookView(APIView):

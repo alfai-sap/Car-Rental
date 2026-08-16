@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from PIL import Image
 from rest_framework.test import APIClient
 from rest_framework import status
-from apps.vehicles.models import Vehicle, VehicleImage
+from apps.vehicles.models import Vehicle, VehicleImage, VehicleUnit
 
 User = get_user_model()
 
@@ -217,3 +217,57 @@ class VehicleImageAPITests(TestCase):
             self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         finally:
             os.unlink(img_path)
+
+
+class VehicleUnitDeletionProtectionTests(TestCase):
+    """Deleting a unit referenced by a booking must be blocked (DB PROTECT)."""
+
+    def setUp(self):
+        from apps.bookings.models import Booking
+
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            email='admin@test.com', username='admin',
+            password='AdminPass123!',
+        )
+        self.customer = User.objects.create_user(
+            email='customer@test.com', username='customer',
+            password='CustomerPass123!',
+        )
+        self.vehicle = Vehicle.objects.create(
+            make='Toyota', model='Vios', year=2024, type='sedan',
+            price_per_day=2500.00,
+        )
+        self.unit = VehicleUnit.objects.create(
+            vehicle=self.vehicle, plate_number='ABC-1234', status='booked',
+        )
+        self.booking = Booking.objects.create(
+            customer=self.customer,
+            vehicle=self.vehicle,
+            vehicle_unit=self.unit,
+            pickup_date='2026-09-01',
+            return_date='2026-09-03',
+            pickup_time='09:00',
+            return_time='17:00',
+            rental_days=3,
+            subtotal=7500,
+            estimated_total=7500,
+            status='confirmed',
+        )
+
+    def _login_admin(self):
+        self.client.force_authenticate(user=self.admin)
+
+    def test_delete_unit_referenced_by_booking_is_blocked(self):
+        """A unit assigned to a booking cannot be deleted via the API."""
+        self._login_admin()
+        response = self.client.delete(f'/api/vehicles/{self.vehicle.pk}/units/{self.unit.pk}/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(VehicleUnit.objects.filter(pk=self.unit.pk).exists())
+
+    def test_delete_vehicle_referenced_by_booking_is_blocked(self):
+        """A vehicle referenced by a booking cannot be deleted via the API."""
+        self._login_admin()
+        response = self.client.delete(f'/api/vehicles/{self.vehicle.pk}/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Vehicle.objects.filter(pk=self.vehicle.pk).exists())

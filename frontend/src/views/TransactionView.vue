@@ -73,6 +73,8 @@ interface InvoiceRecord {
 
 interface Booking {
   id: number
+  hash_id: string
+  vehicle_hash_id: string
   booking_number: string
   customer: number
   customer_email: string
@@ -127,7 +129,7 @@ async function loadAssignmentHistory() {
   if (!booking.value) return
   loadingHistory.value = true
   try {
-    const response = await api.get(`/bookings/${booking.value.id}/assignment-history/`)
+    const response = await api.get(`/bookings/${booking.value.hash_id}/assignment-history/`)
     assignmentHistory.value = response.data as AssignmentEntry[]
   } catch { assignmentHistory.value = [] }
   finally { loadingHistory.value = false }
@@ -173,7 +175,7 @@ async function confirmCancel() {
   if (!booking.value || !canConfirmCancel.value) return
   cancelling.value = true
   try {
-    await api.post(`/bookings/${booking.value.id}/cancel/`, {
+    await api.post(`/bookings/${booking.value.hash_id}/cancel/`, {
       cancellation_reason: cancelReasonText.value,
     })
     showCancelModal.value = false
@@ -198,6 +200,7 @@ function currentStepIndex(status: string): number {
     case 'approved': return 2
     case 'awaiting_payment': return 2
     case 'confirmed': return 3
+    case 'waiting_for_pickup': return 3
     case 'active': return 4
     case 'completed': return 6
     case 'rejected': return 1
@@ -244,7 +247,7 @@ async function initiatePayment() {
   paying.value = true
   paymentNotice.value = ''
   try {
-    const response = await api.post('/payments/create-session/', { booking_id: booking.value.id })
+    const response = await api.post('/payments/create-session/', { booking_hash_id: booking.value.hash_id })
     if (response.data.checkout_url) window.location.href = response.data.checkout_url
     else paymentNotice.value = response.data.detail || 'Payment setup is not configured yet. Please contact support.'
   } catch (error: any) {
@@ -277,7 +280,7 @@ async function fetchBooking() {
 async function checkPaymentStatus() {
   if (!booking.value) return
   try {
-    const response = await api.post(`/bookings/${booking.value.id}/check-payment/`)
+    const response = await api.post(`/bookings/${booking.value.hash_id}/check-payment/`)
     booking.value = response.data
   } catch { /* keep current state on failure */ }
 }
@@ -295,6 +298,7 @@ const stepHint = computed(() => {
     case 'approved': return 'Booking approved — proceed to payment'
     case 'awaiting_payment': return 'Payment required to confirm booking'
     case 'confirmed': return 'Your booking is confirmed — prepare for pickup'
+    case 'waiting_for_pickup': return 'Your vehicle unit is assigned — ready for pickup'
     case 'active': return 'Vehicle is currently rented'
     case 'completed': return 'Rental completed'
     case 'rejected': return `Rejected: ${booking.value.rejection_reason || 'No reason provided'}`
@@ -406,6 +410,7 @@ onMounted(fetchBooking)
                     'bg-blue-100 text-blue-800': booking.status === 'approved',
                     'bg-purple-100 text-purple-800': booking.status === 'awaiting_payment',
                     'bg-green-100 text-green-800': booking.status === 'confirmed',
+                    'bg-cyan-100 text-cyan-800': booking.status === 'waiting_for_pickup',
                     'bg-emerald-100 text-emerald-800': booking.status === 'active',
                     'bg-zinc-100 text-zinc-800': booking.status === 'completed',
                     'bg-red-100 text-red-800': ['cancelled','rejected'].includes(booking.status),
@@ -457,7 +462,7 @@ onMounted(fetchBooking)
                 <CreditCard class="h-8 w-8 text-zinc-300 mx-auto mb-2" />
                 <p class="text-xs text-zinc-500">
                   <template v-if="booking.status === 'awaiting_payment'">Payment is required to confirm your booking.</template>
-                  <template v-else-if="booking.status === 'confirmed' || booking.status === 'active' || booking.status === 'completed'">Payment confirmed</template>
+                  <template v-else-if="['confirmed', 'waiting_for_pickup', 'active', 'completed'].includes(booking.status)">Payment confirmed</template>
                   <template v-else-if="booking.status === 'pending_approval'">Awaiting approval before payment</template>
                   <template v-else>No payment information available</template>
                 </p>

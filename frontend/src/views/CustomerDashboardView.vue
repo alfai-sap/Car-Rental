@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
@@ -10,7 +9,6 @@ import {
   ChevronDown, ChevronUp, ExternalLink, ChevronLeft, ChevronRight, Search, ListFilter, ArrowUpDown,
 } from 'lucide-vue-next'
 
-const auth = useAuthStore()
 
 interface BookingSummary {
   total: number
@@ -52,8 +50,6 @@ const error = ref('')
 const summary = ref<BookingSummary | null>(null)
 const bookings = ref<BookingItem[]>([])
 const expandedId = ref<number | null>(null)
-const cancellingId = ref<number | null>(null)
-const payingId = ref<number | null>(null)
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -142,6 +138,7 @@ function statusBadgeClass(status: string): string {
     case 'approved': return 'bg-blue-100 text-blue-800'
     case 'awaiting_payment': return 'bg-purple-100 text-purple-800'
     case 'confirmed': return 'bg-green-100 text-green-800'
+    case 'waiting_for_pickup': return 'bg-cyan-100 text-cyan-800'
     case 'active': return 'bg-emerald-100 text-emerald-800'
     case 'completed': return 'bg-zinc-100 text-zinc-800'
     case 'cancelled': return 'bg-red-100 text-red-800'
@@ -169,33 +166,6 @@ function toggleExpanded(id: number) {
   expandedId.value = expandedId.value === id ? null : id
 }
 
-async function cancelBooking(bookingId: number) {
-  cancellingId.value = bookingId
-  try {
-    await api.post(`/bookings/${bookingId}/cancel/`)
-    await fetchDashboard()
-  } catch {
-    // ignore
-  } finally {
-    cancellingId.value = null
-  }
-}
-
-async function initiatePayment(bookingId: number) {
-  payingId.value = bookingId
-  try {
-    const response = await api.post('/payments/create-session/', { booking_id: bookingId })
-    // Redirect to PayMongo checkout
-    if (response.data.checkout_url) {
-      window.location.href = response.data.checkout_url
-    }
-  } catch {
-    // ignore
-  } finally {
-    payingId.value = null
-  }
-}
-
 async function fetchDashboard() {
   loading.value = true
   error.value = ''
@@ -216,6 +186,7 @@ function statusIcon(status: string) {
     case 'approved': return CheckCircle
     case 'awaiting_payment': return AlertCircle
     case 'confirmed': return CheckCircle
+    case 'waiting_for_pickup': return Car
     case 'active': return Car
     case 'completed': return CheckCircle
     case 'cancelled': return XCircle

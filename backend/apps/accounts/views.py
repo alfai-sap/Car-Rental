@@ -17,6 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.core.exception_handler import format_throttle_message
+from apps.core.throttles import IdentityImageThrottle
 
 from .models import User, IdentityDocument
 from .serializers import (
@@ -778,6 +779,9 @@ class IdentityDocumentImageView(views.APIView):
     """
     permission_classes = [AllowAny]
     throttle_scope = 'identity_doc_image'
+    # Per-user throttle keyed on the signed token's owner (not just the IP),
+    # so a single leaked URL cannot be scraped from many machines.
+    throttle_classes = [IdentityImageThrottle]
 
     def get(self, request, pk, side):
         token = request.query_params.get('token', '')
@@ -789,7 +793,7 @@ class IdentityDocumentImageView(views.APIView):
 
         # Verify the signed token — it encodes "doc_pk.user_pk.side"
         try:
-            signed_value = unsign_identity_image_token(token, max_age=300)
+            signed_value = unsign_identity_image_token(token)
         except (SignatureExpired, BadSignature):
             raise Http404
 

@@ -97,6 +97,37 @@ class VehicleImage(models.Model):
     class Meta:
         ordering = ['-is_primary', '-uploaded_at']
 
+    def save(self, *args, **kwargs):
+        """Enforce a single primary image per vehicle, and always keep one.
+
+        Marking an image as primary demotes any other primary image on the
+        same vehicle, so ``filter(is_primary=True).first()`` always yields the
+        one true primary rather than an arbitrary first match.  Unsetting the
+        last primary promotes the most recently uploaded remaining image so a
+        vehicle never ends up with no primary image.
+        """
+        if self.is_primary:
+            VehicleImage.objects.filter(
+                vehicle=self.vehicle, is_primary=True,
+            ).exclude(pk=self.pk).update(is_primary=False)
+
+        super().save(*args, **kwargs)
+
+        if not self.is_primary:
+            has_primary = VehicleImage.objects.filter(
+                vehicle=self.vehicle, is_primary=True,
+            ).exclude(pk=self.pk).exists()
+            if not has_primary:
+                fallback = (
+                    VehicleImage.objects
+                    .filter(vehicle=self.vehicle)
+                    .exclude(pk=self.pk)
+                    .order_by('-uploaded_at')
+                    .first()
+                )
+                if fallback:
+                    VehicleImage.objects.filter(pk=fallback.pk).update(is_primary=True)
+
     def __str__(self):
         return f"Image for {self.vehicle} {'(primary)' if self.is_primary else ''}"
 

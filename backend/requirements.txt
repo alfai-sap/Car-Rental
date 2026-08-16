@@ -1,25 +1,25 @@
 # Django & API
-django>=4.2,<6.0
-djangorestframework>=3.14,<4.0
-django-cors-headers>=4.0,<5.0
-django-filter>=23.0,<27.0
-drf-nested-routers>=0.93,<1.0
+Django==5.2.17
+djangorestframework==3.17.1
+django-cors-headers==4.9.0
+django-filter==26.1
+drf-nested-routers==0.95.3
 
 # Authentication
-djangorestframework-simplejwt>=5.3,<6.0
-google-auth>=2.0,<3.0
+djangorestframework-simplejwt==5.5.1
+google-auth==2.56.3
 
 # Database
-psycopg2-binary>=2.9,<3.0
+psycopg2-binary==2.9.12
 
 # Environment
-python-dotenv>=1.0,<2.0
+python-dotenv==1.2.2
 
 # File Uploads
-Pillow>=10.0,<12.0
+Pillow==11.3.0
 
 # HTTP (PayMongo API calls)
-requests>=2.31,<3.0
+requests==2.34.2
 
 # Error monitoring
-sentry-sdk[django]>=2.0,<3.0
+sentry-sdk[django]==2.68.0
