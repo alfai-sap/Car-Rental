@@ -347,25 +347,36 @@ def notify_payment_failed(booking):
     )
 
 
-def notify_payment_expired(booking):
-    msg = (
-        f"Your payment for {_vehicle_name(booking)} has expired. "
-        f"You can request a new payment attempt from your booking details."
-    )
-    create_notification(
-        user=booking.customer, notification_type='payment_failed',
-        title='Payment Expired — Request a New Attempt', message=msg,
-        booking=booking, link=_booking_link(booking),
-    )
-    create_admin_notification(
-        notification_type='payment_failed',
-        title=f'Payment Expired: {booking.booking_number}',
-        message=(
-            f"Payment for {booking.customer.first_name} {booking.customer.last_name}'s "
-            f"booking of {_vehicle_name(booking)} has expired."
-        ),
-        booking=booking, link=_admin_link(booking),
-    )
+# ─────────────────────────────────────────────────────────────────────────
+# DEAD CODE — notify_payment_expired
+#
+# Intentionally disabled.  Payment expiry is no longer signalled via a
+# dedicated notification: the reconciliation path (``reconcile_payment``)
+# marks the local Payment as ``expired`` directly and the customer simply
+# retries checkout to obtain a fresh session.  Kept for reference; un-comment
+# and wire it up if a distinct "payment expired" email/notification is ever
+# required again.
+#
+# def notify_payment_expired(booking):
+#     msg = (
+#         f"Your payment for {_vehicle_name(booking)} has expired. "
+#         f"You can request a new payment attempt from your booking details."
+#     )
+#     create_notification(
+#         user=booking.customer, notification_type='payment_failed',
+#         title='Payment Expired — Request a New Attempt', message=msg,
+#         booking=booking, link=_booking_link(booking),
+#     )
+#     create_admin_notification(
+#         notification_type='payment_failed',
+#         title=f'Payment Expired: {booking.booking_number}',
+#         message=(
+#             f"Payment for {booking.customer.first_name} {booking.customer.last_name}'s "
+#             f"booking of {_vehicle_name(booking)} has expired."
+#         ),
+#         booking=booking, link=_admin_link(booking),
+#     )
+# ─────────────────────────────────────────────────────────────────────────
 
 
 def notify_booking_confirmed(booking):
@@ -468,13 +479,22 @@ def notify_transaction_completed(booking):
     )
 
 
-def notify_additional_payment_required(booking, amount):
-    msg = f"An additional payment of ₱{amount} is required for booking #{booking.booking_number}."
-    create_notification(
-        user=booking.customer, notification_type='additional_payment_required',
-        title='Additional Payment Required', message=msg,
-        booking=booking, link=_booking_link(booking),
-    )
+# ─────────────────────────────────────────────────────────────────────────
+# DEAD CODE — notify_additional_payment_required
+#
+# Intentionally disabled.  "Additional payment" belongs to the upcoming
+# refund / extension features (explicitly out of scope for the current
+# phase).  Kept for reference; un-comment and wire it up when those features
+# are implemented.
+#
+# def notify_additional_payment_required(booking, amount):
+#     msg = f"An additional payment of ₱{amount} is required for booking #{booking.booking_number}."
+#     create_notification(
+#         user=booking.customer, notification_type='additional_payment_required',
+#         title='Additional Payment Required', message=msg,
+#         booking=booking, link=_booking_link(booking),
+#     )
+# ─────────────────────────────────────────────────────────────────────────
 
 
 # ── Email context ──

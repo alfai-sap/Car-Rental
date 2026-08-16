@@ -7,6 +7,20 @@ from django.conf import settings
 
 
 class Notification(models.Model):
+    # ── Notification type catalogue ──
+    #
+    # ACTIVE: emitted by the notification service and consumed by the
+    # frontend NotificationsView.
+    #
+    # RESERVED (unused): kept in the schema so historical rows with these
+    # values remain valid, and for upcoming features.  They are NOT emitted
+    # by any code path today:
+    #   * reschedule_requested / reschedule_approved / reschedule_rejected
+    #     — no reschedule feature is implemented.
+    #   * extension_requested / extension_approved / extension_rejected
+    #     — reserved for the upcoming extension feature.
+    #   * additional_payment_required — reserved for the upcoming
+    #     refund / extension feature.
     NOTIFICATION_TYPES = [
         ('booking_submitted', 'Booking Request Submitted'),
         ('booking_approved', 'Booking Approved'),
@@ -15,6 +29,7 @@ class Notification(models.Model):
         ('payment_successful', 'Payment Successful'),
         ('payment_failed', 'Payment Failed'),
         ('booking_confirmed', 'Booking Confirmed'),
+        # Reserved (unused) — reschedule flow not implemented.
         ('reschedule_requested', 'Reschedule Requested'),
         ('reschedule_approved', 'Reschedule Approved'),
         ('reschedule_rejected', 'Reschedule Rejected'),
@@ -22,10 +37,12 @@ class Notification(models.Model):
         ('unit_changed', 'Vehicle Unit Changed'),
         ('pickup_reminder', 'Pickup Reminder'),
         ('rental_activated', 'Rental Activated'),
+        # Reserved (unused) — upcoming extension feature.
         ('extension_requested', 'Extension Requested'),
         ('extension_approved', 'Extension Approved'),
         ('extension_rejected', 'Extension Rejected'),
         ('vehicle_returned', 'Vehicle Returned'),
+        # Reserved (unused) — upcoming refund / extension feature.
         ('additional_payment_required', 'Additional Payment Required'),
         ('transaction_completed', 'Transaction Completed'),
     ]
