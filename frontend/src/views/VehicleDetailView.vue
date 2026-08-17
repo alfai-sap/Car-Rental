@@ -4,7 +4,7 @@ import { useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Navbar from '@/components/Navbar.vue'
 import Button from '@/components/ui/Button.vue'
-import { Fuel, Users, Gauge, Car, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-vue-next'
+import { Fuel, Users, Gauge, Car, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, X, MapPin } from 'lucide-vue-next'
 import api from '@/services/api'
 
 const auth = useAuthStore()
@@ -38,6 +38,7 @@ interface Vehicle {
   } | null
   weekly_price: string
   monthly_price: string
+  pickup_address: string | null
 }
 
 const route = useRoute()
@@ -192,7 +193,7 @@ onMounted(async () => {
         </RouterLink>
 
         <!-- Gallery + Booking Sidebar -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           <!-- Image Gallery -->
           <div class="lg:col-span-2">
             <div v-if="vehicle.images.length">
@@ -340,6 +341,16 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+
+          <!-- Pickup Address -->
+          <div v-if="vehicle.pickup_address">
+            <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2">Pickup Address</h2>
+            <div class="flex items-start gap-2 text-sm text-zinc-700">
+              <MapPin class="h-4 w-4 text-zinc-400 mt-0.5 shrink-0" />
+              <span class="leading-relaxed">{{ vehicle.pickup_address }}</span>
+            </div>
+          </div>
+
         </div>
       </template>
     </main>

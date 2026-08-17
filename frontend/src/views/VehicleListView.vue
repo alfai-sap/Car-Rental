@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import Navbar from '@/components/Navbar.vue'
 import Input from '@/components/ui/Input.vue'
-import { Search, SlidersHorizontal, Fuel, Users, Gauge, Car } from 'lucide-vue-next'
+import { Search, SlidersHorizontal, Fuel, Users, Gauge, Car, MapPin } from 'lucide-vue-next'
 import api from '@/services/api'
 
 interface Vehicle {
@@ -19,6 +19,7 @@ interface Vehicle {
   price_per_day: string
   status: string
   primary_image: string | null
+  pickup_address: string | null
 }
 
 const vehicles = ref<Vehicle[]>([])
@@ -154,6 +155,10 @@ onMounted(fetchVehicles)
               <span class="flex items-center gap-1">
                 <Users class="h-3.5 w-3.5" /> {{ vehicle.seats }}
               </span>
+            </div>
+            <div v-if="vehicle.pickup_address" class="flex items-start gap-1.5 mt-3 text-xs text-zinc-500">
+              <MapPin class="h-3.5 w-3.5 mt-0.5 shrink-0 text-zinc-400" />
+              <span class="leading-snug">{{ vehicle.pickup_address }}</span>
             </div>
           </div>
         </RouterLink>

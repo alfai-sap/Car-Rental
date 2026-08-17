@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   ChevronLeft, Check, Clock, XCircle, AlertCircle,
-  CreditCard, Car, CheckCircle, Calendar, RefreshCw,
+  CreditCard, Car, CheckCircle, Calendar, RefreshCw, MapPin,
 } from 'lucide-vue-next'
 
 interface IdentityDoc {
@@ -31,6 +31,7 @@ interface IdentitySnapshot {
   customer_name: string
   customer_email: string
   customer_phone: string
+  pickup_address?: string | null
   documents: IdentitySnapshotDoc[]
   captured_at: string
 }
@@ -435,6 +436,13 @@ onMounted(fetchBooking)
               <div class="grid grid-cols-2 gap-4">
                 <div class="flex items-start gap-2"><Calendar class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" /><div><p class="text-xs text-zinc-500">Pickup</p><p class="text-sm font-medium text-zinc-900">{{ formatDate(booking.pickup_date) }}</p><p class="text-xs text-zinc-400">{{ formatTime(booking.pickup_time) }}</p></div></div>
                 <div class="flex items-start gap-2"><Calendar class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" /><div><p class="text-xs text-zinc-500">Return</p><p class="text-sm font-medium text-zinc-900">{{ formatDate(booking.return_date) }}</p><p class="text-xs text-zinc-400">{{ formatTime(booking.return_time) }}</p></div></div>
+              </div>
+              <div v-if="booking.identity_snapshot?.pickup_address" class="mt-3 flex items-start gap-2">
+                <MapPin class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p class="text-xs text-zinc-500">Pickup Address</p>
+                  <p class="text-sm text-zinc-700 leading-snug">{{ booking.identity_snapshot.pickup_address }}</p>
+                </div>
               </div>
               <div v-if="booking.special_request" class="mt-4 pt-4 border-t border-zinc-100"><p class="text-xs text-zinc-400 mb-1">Special Request</p><p class="text-sm text-zinc-700">{{ booking.special_request }}</p></div>
               <div v-if="booking.rejection_reason" class="mt-4 rounded-md bg-red-50 border border-red-200 p-3"><p class="text-xs font-medium text-red-800 mb-0.5">Cancellation Reason</p><p class="text-sm text-red-700">{{ booking.rejection_reason }}</p></div>

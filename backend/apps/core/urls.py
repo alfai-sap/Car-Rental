@@ -7,4 +7,5 @@ urlpatterns = [
     path('admin/audit-logs/', views.AuditLogListView.as_view(), name='admin-audit-logs'),
     path('admin/discount-policy/', views.RentalDiscountPolicyView.as_view(), name='admin-discount-policy'),
     path('discount-policy/', views.PublicDiscountPolicyView.as_view(), name='discount-policy'),
+    path('pickup-address/', views.PickupAddressView.as_view(), name='pickup-address'),
 ]

@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
 import api from '@/services/api'
-import { Percent, Plus, Trash2, Save, AlertCircle, BadgeCheck } from 'lucide-vue-next'
+import { Percent, Plus, Trash2, Save, AlertCircle, BadgeCheck, MapPin } from 'lucide-vue-next'
 
 interface Tier {
   id?: number
@@ -35,6 +35,36 @@ const description = ref('')
 const tiers = ref<Tier[]>([])
 
 const editingPolicyId = ref<number | null>(null)
+
+// ── Pickup address (singleton) ──
+const pickupAddress = ref('')
+const savingAddress = ref(false)
+const addressSuccess = ref('')
+const addressError = ref('')
+
+async function fetchPickupAddress() {
+  try {
+    const response = await api.get('/pickup-address/')
+    pickupAddress.value = response.data.address || ''
+  } catch {
+    /* ignore — pickup address is optional */
+  }
+}
+
+async function savePickupAddress() {
+  savingAddress.value = true
+  addressError.value = ''
+  addressSuccess.value = ''
+  try {
+    await api.post('/pickup-address/', { address: pickupAddress.value })
+    addressSuccess.value = 'Pickup address saved.'
+  } catch (e: unknown) {
+    const data = (e as { response?: { data?: { detail?: string } } })?.response?.data
+    addressError.value = data?.detail || 'Failed to save pickup address.'
+  } finally {
+    savingAddress.value = false
+  }
+}
 
 async function fetchPolicies() {
   loading.value = true
@@ -82,7 +112,10 @@ async function fetchPolicies() {
   }
 }
 
-onMounted(fetchPolicies)
+onMounted(() => {
+  fetchPolicies()
+  fetchPickupAddress()
+})
 
 function addTier() {
   const nextMinDays = tiers.value.length > 0
@@ -145,7 +178,7 @@ async function savePolicy() {
         <h1 class="text-2xl font-semibold text-zinc-900">Settings</h1>
       </div>
       <p class="text-sm text-zinc-500 mb-8">
-        Manage the fleet-wide rental discount policy.
+        Manage the fleet-wide rental discount policy and pickup address.
       </p>
 
       <div v-if="loading" class="text-center py-20">
@@ -153,6 +186,39 @@ async function savePolicy() {
       </div>
 
       <template v-else>
+        <!-- Pickup Address -->
+        <div class="rounded-lg border border-zinc-200 bg-white p-6 space-y-4 mb-6">
+          <div class="flex items-center gap-2">
+            <MapPin class="h-4 w-4 text-blue-600" />
+            <span class="text-sm font-semibold text-zinc-900">Pickup Address</span>
+          </div>
+          <p class="text-xs text-zinc-400">
+            Displayed on every vehicle listing, detail page, and transaction.
+            Bookings snapshot this address at creation time.
+          </p>
+
+          <div class="space-y-2">
+            <Label>Complete Pickup Address</Label>
+            <textarea
+              v-model="pickupAddress"
+              rows="3"
+              placeholder="e.g. 123 Rizal Ave, Brgy. San Isidro, Makati City, Metro Manila"
+              class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            />
+          </div>
+
+          <p v-if="addressError" class="text-sm text-red-600 flex items-start gap-1.5">
+            <AlertCircle class="h-4 w-4 mt-0.5 shrink-0" /> {{ addressError }}
+          </p>
+          <p v-if="addressSuccess" class="text-sm text-green-600">{{ addressSuccess }}</p>
+
+          <Button variant="outline" :disabled="savingAddress" @click="savePickupAddress">
+            <Save class="h-4 w-4 mr-1.5" />
+            {{ savingAddress ? 'Saving...' : 'Save Pickup Address' }}
+          </Button>
+        </div>
+
+        <!-- Discount Policy -->
         <div class="rounded-lg border border-zinc-200 bg-white p-6 space-y-6">
           <div class="flex items-center gap-2">
             <BadgeCheck class="h-4 w-4 text-green-600" />

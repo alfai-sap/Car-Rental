@@ -7,7 +7,7 @@ A full-stack car rental management platform built with **Vue 3 + Django REST Fra
 | Layer | Technology |
 |---|---|
 | Frontend | Vue 3, TypeScript, Vite, Tailwind CSS, shadcn-vue |
-| Backend | Django 4.2, Django REST Framework |
+| Backend | Django 5.2.17, Django REST Framework |
 | Auth | JWT (Simple JWT) |
 | Database | PostgreSQL |
 | Payments | PayMongo (MVP) |

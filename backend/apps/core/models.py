@@ -79,6 +79,34 @@ class Notification(models.Model):
         return f"[{self.get_notification_type_display()}] {self.title} — {self.user.email}"
 
 
+class PickupAddress(models.Model):
+    """Global pickup location shown on every vehicle listing/detail.
+
+    A singleton: there is exactly one pickup address for the whole fleet.
+    Bookings snapshot the address at creation time so later edits never
+    mutate past transactions.
+    """
+
+    address = models.TextField(
+        blank=True,
+        help_text='Complete pickup address (street, city, province, postal code).',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Pickup address'
+        verbose_name_plural = 'Pickup address'
+
+    def __str__(self):
+        return self.address or '(not set)'
+
+    @classmethod
+    def get_instance(cls):
+        """Return the singleton pickup address, creating it if absent."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class AuditLog(models.Model):
     """Immutable audit trail for all admin actions on bookings and payments.
 

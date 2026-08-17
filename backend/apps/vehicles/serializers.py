@@ -44,14 +44,20 @@ class VehicleListSerializer(serializers.ModelSerializer):
     primary_image = serializers.SerializerMethodField()
     total_units = serializers.SerializerMethodField()
     available_units = serializers.SerializerMethodField()
+    pickup_address = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
         fields = [
             'id', 'hash_id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'primary_image',
-            'total_units', 'available_units', 'created_at',
+            'total_units', 'available_units', 'pickup_address', 'created_at',
         ]
+
+    def get_pickup_address(self, obj):
+        """Return the global pickup address for display on every listing."""
+        from apps.core.models import PickupAddress
+        return PickupAddress.get_instance().address or None
 
     def get_primary_image(self, obj):
         primary = obj.images.filter(is_primary=True).first()
@@ -85,6 +91,7 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
     discount_policy = serializers.SerializerMethodField()
     weekly_price = serializers.SerializerMethodField()
     monthly_price = serializers.SerializerMethodField()
+    pickup_address = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
@@ -92,10 +99,15 @@ class VehicleDetailSerializer(serializers.ModelSerializer):
             'id', 'hash_id', 'make', 'model', 'year', 'type', 'transmission', 'fuel',
             'seats', 'price_per_day', 'status', 'description', 'images',
             'total_units', 'available_units',
-            'discount_policy', 'weekly_price', 'monthly_price',
+            'discount_policy', 'weekly_price', 'monthly_price', 'pickup_address',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'images']
+
+    def get_pickup_address(self, obj):
+        """Return the global pickup address for display on the detail page."""
+        from apps.core.models import PickupAddress
+        return PickupAddress.get_instance().address or None
 
     def get_total_units(self, obj):
         return obj.units.count()

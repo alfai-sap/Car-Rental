@@ -1,5 +1,5 @@
 from django.contrib import admin
-from apps.core.models import Notification, AuditLog, RentalDiscountPolicy, DiscountTier
+from apps.core.models import Notification, AuditLog, RentalDiscountPolicy, DiscountTier, PickupAddress
 
 
 @admin.register(Notification)
@@ -23,6 +23,19 @@ class RentalDiscountPolicyAdmin(admin.ModelAdmin):
     list_filter = ['is_default']
     search_fields = ['name']
     inlines = [DiscountTierInline]
+
+
+@admin.register(PickupAddress)
+class PickupAddressAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'updated_at']
+    fields = ['address']
+
+    def has_add_permission(self, request):
+        # Singleton — the single row is auto-created on first access.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AuditLog)

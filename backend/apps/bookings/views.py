@@ -86,9 +86,16 @@ def _build_identity_snapshot(user):
         'customer_name': f"{user.first_name} {user.last_name}",
         'customer_email': user.email,
         'customer_phone': user.phone,
+        'pickup_address': _current_pickup_address(),
         'documents': documents,
         'captured_at': timezone.now().isoformat(),
     }
+
+
+def _current_pickup_address():
+    """Return the global pickup address at booking time (for snapshotting)."""
+    from apps.core.models import PickupAddress
+    return PickupAddress.get_instance().address or None
 
 
 # ─────────────────────────────────────────────

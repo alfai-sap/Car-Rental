@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
 
-from apps.core.models import AuditLog, RentalDiscountPolicy, DiscountTier
+from apps.core.models import AuditLog, RentalDiscountPolicy, DiscountTier, PickupAddress
 from apps.core.ids import encode_id
 
 
@@ -291,5 +291,33 @@ class PublicDiscountPolicyView(APIView):
                 }
                 for tier in default.tiers.all()
             ],
+        })
+
+
+class PickupAddressView(APIView):
+    """Admin CRUD for the global pickup address.
+
+    GET is public (displayed on vehicle listings/detail).  PUT/POST is
+    staff-only and updates the singleton pickup address.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        address = PickupAddress.get_instance()
+        return Response({
+            'address': address.address,
+            'updated_at': address.updated_at.isoformat() if address.updated_at else None,
+        })
+
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({'detail': 'Not authorized.'}, status=status.HTTP_403_FORBIDDEN)
+
+        address = PickupAddress.get_instance()
+        address.address = (request.data.get('address') or '').strip()
+        address.save()
+        return Response({
+            'address': address.address,
+            'updated_at': address.updated_at.isoformat() if address.updated_at else None,
         })
 

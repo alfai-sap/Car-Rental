@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button.vue'
 import api from '@/services/api'
 import {
   ChevronLeft, Check, Clock, XCircle, AlertCircle,
-  CreditCard, Car, CheckCircle, Calendar, Shield, User, Truck, RefreshCw,
+  CreditCard, Car, CheckCircle, Calendar, Shield, User, Truck, RefreshCw, MapPin,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -34,6 +34,7 @@ interface IdentitySnapshot {
   customer_name: string
   customer_email: string
   customer_phone: string
+  pickup_address?: string | null
   documents: IdentitySnapshotDoc[]
   captured_at: string
 }
@@ -591,6 +592,14 @@ onMounted(fetchBooking)
                     <p class="text-sm font-medium text-zinc-900">{{ formatDate(booking.return_date) }}</p>
                     <p class="text-xs text-zinc-400">{{ formatTime(booking.return_time) }}</p>
                   </div>
+                </div>
+              </div>
+
+              <div v-if="booking.identity_snapshot?.pickup_address" class="mb-4 flex items-start gap-2">
+                <MapPin class="h-4 w-4 text-zinc-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p class="text-xs text-zinc-500">Pickup Address</p>
+                  <p class="text-sm text-zinc-700 leading-snug">{{ booking.identity_snapshot.pickup_address }}</p>
                 </div>
               </div>
 
