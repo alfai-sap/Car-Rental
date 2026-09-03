@@ -145,11 +145,11 @@ USE_TZ = True
 # Custom user model
 AUTH_USER_MODEL = 'accounts.User'
 
-# Email — console in dev (no SMTP needed), SMTP in production
-if DEBUG:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-else:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# # Email — console in dev (no SMTP needed), SMTP in production
+# if DEBUG:
+#     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# else:
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
@@ -254,6 +254,16 @@ if PAYMENT_PROVIDER == 'paymongo':
             f'environment variables are missing: {", ".join(missing)}. '
             'Set them in your .env file or switch PAYMENT_PROVIDER to "disabled".'
         )
+
+# ── Startup validation: email (SMTP) configuration ──
+# Email is only actually sent when DEBUG=False (console backend in dev).
+# Fail fast in production if the SMTP provider is not fully configured so a
+# missing Brevo/SMTP credential surfaces at deploy time, not at send time.
+if not DEBUG and not (EMAIL_HOST and EMAIL_HOST_USER and EMAIL_HOST_PASSWORD):
+    raise ImproperlyConfigured(
+        'Email is not fully configured. Set EMAIL_HOST, EMAIL_HOST_USER, '
+        'EMAIL_HOST_PASSWORD (and DEFAULT_FROM_EMAIL) in your .env file.'
+    )
 
 # Password Reset — 15 minute expiry
 PASSWORD_RESET_TIMEOUT = 900

@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
 import api from '@/services/api'
-import { Percent, Plus, Trash2, Save, AlertCircle, BadgeCheck, MapPin } from 'lucide-vue-next'
+import { Percent, Plus, Trash2, Save, AlertCircle, BadgeCheck, MapPin, Pencil, X } from 'lucide-vue-next'
 
 interface Tier {
   id?: number
@@ -36,11 +36,19 @@ const tiers = ref<Tier[]>([])
 
 const editingPolicyId = ref<number | null>(null)
 
+// Whether the discount policy is in edit mode (read-only display by default)
+const editingPolicy = ref(false)
+const originalName = ref('')
+const originalDescription = ref('')
+const originalTiers = ref<Tier[]>([])
+
 // ── Pickup address (singleton) ──
 const pickupAddress = ref('')
 const savingAddress = ref(false)
 const addressSuccess = ref('')
 const addressError = ref('')
+const editingAddress = ref(false)
+const addressDraft = ref('')
 
 async function fetchPickupAddress() {
   try {
@@ -51,12 +59,27 @@ async function fetchPickupAddress() {
   }
 }
 
+function startEditAddress() {
+  addressDraft.value = pickupAddress.value
+  addressError.value = ''
+  addressSuccess.value = ''
+  editingAddress.value = true
+}
+
+function cancelEditAddress() {
+  editingAddress.value = false
+  addressError.value = ''
+  addressSuccess.value = ''
+}
+
 async function savePickupAddress() {
   savingAddress.value = true
   addressError.value = ''
   addressSuccess.value = ''
   try {
-    await api.post('/pickup-address/', { address: pickupAddress.value })
+    await api.post('/pickup-address/', { address: addressDraft.value })
+    pickupAddress.value = addressDraft.value
+    editingAddress.value = false
     addressSuccess.value = 'Pickup address saved.'
   } catch (e: unknown) {
     const data = (e as { response?: { data?: { detail?: string } } })?.response?.data
@@ -128,6 +151,24 @@ function removeTier(index: number) {
   tiers.value.splice(index, 1)
 }
 
+function startEditPolicy() {
+  originalName.value = name.value
+  originalDescription.value = description.value
+  originalTiers.value = tiers.value.map(t => ({ ...t }))
+  error.value = ''
+  success.value = ''
+  editingPolicy.value = true
+}
+
+function cancelEditPolicy() {
+  name.value = originalName.value
+  description.value = originalDescription.value
+  tiers.value = originalTiers.value.map(t => ({ ...t }))
+  error.value = ''
+  success.value = ''
+  editingPolicy.value = false
+}
+
 const tiersLabel = computed(() => {
   const sorted = [...tiers.value].sort((a, b) => Number(a.min_days) - Number(b.min_days))
   return sorted.map(t => `${t.min_days}+ days → ${t.discount_percent}%`).join('  ·  ')
@@ -150,6 +191,7 @@ async function savePolicy() {
     }
     await api.post('/admin/discount-policy/', payload)
     success.value = 'Discount policy saved.'
+    editingPolicy.value = false
     await fetchPolicies()
   } catch (e: unknown) {
     const data = (e as { response?: { data?: Record<string, string | string[]> | { detail?: string } } })?.response?.data
@@ -188,100 +230,153 @@ async function savePolicy() {
       <template v-else>
         <!-- Pickup Address -->
         <div class="rounded-lg border border-zinc-200 bg-white p-6 space-y-4 mb-6">
-          <div class="flex items-center gap-2">
-            <MapPin class="h-4 w-4 text-blue-600" />
-            <span class="text-sm font-semibold text-zinc-900">Pickup Address</span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <MapPin class="h-4 w-4 text-blue-600" />
+              <span class="text-sm font-semibold text-zinc-900">Pickup Address</span>
+            </div>
+            <Button v-if="!editingAddress" variant="outline" size="sm" @click="startEditAddress">
+              <Pencil class="h-4 w-4 mr-1.5" /> Edit
+            </Button>
           </div>
           <p class="text-xs text-zinc-400">
             Displayed on every vehicle listing, detail page, and transaction.
             Bookings snapshot this address at creation time.
           </p>
 
-          <div class="space-y-2">
-            <Label>Complete Pickup Address</Label>
-            <textarea
-              v-model="pickupAddress"
-              rows="3"
-              placeholder="e.g. 123 Rizal Ave, Brgy. San Isidro, Makati City, Metro Manila"
-              class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
-            />
+          <!-- Read-only display -->
+          <div
+            v-if="!editingAddress"
+            class="text-sm text-zinc-700 whitespace-pre-wrap rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2"
+          >
+            {{ pickupAddress || 'No pickup address set yet.' }}
           </div>
+
+          <!-- Edit form -->
+          <template v-else>
+            <div class="space-y-2">
+              <Label>Complete Pickup Address</Label>
+              <textarea
+                v-model="addressDraft"
+                rows="3"
+                placeholder="e.g. 123 Rizal Ave, Brgy. San Isidro, Makati City, Metro Manila"
+                class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              />
+            </div>
+
+            <div class="flex items-center gap-2">
+              <Button variant="outline" :disabled="savingAddress" @click="savePickupAddress">
+                <Save class="h-4 w-4 mr-1.5" />
+                {{ savingAddress ? 'Saving...' : 'Save' }}
+              </Button>
+              <Button variant="ghost" :disabled="savingAddress" @click="cancelEditAddress">
+                <X class="h-4 w-4 mr-1.5" /> Cancel
+              </Button>
+            </div>
+          </template>
 
           <p v-if="addressError" class="text-sm text-red-600 flex items-start gap-1.5">
             <AlertCircle class="h-4 w-4 mt-0.5 shrink-0" /> {{ addressError }}
           </p>
           <p v-if="addressSuccess" class="text-sm text-green-600">{{ addressSuccess }}</p>
-
-          <Button variant="outline" :disabled="savingAddress" @click="savePickupAddress">
-            <Save class="h-4 w-4 mr-1.5" />
-            {{ savingAddress ? 'Saving...' : 'Save Pickup Address' }}
-          </Button>
         </div>
 
         <!-- Discount Policy -->
         <div class="rounded-lg border border-zinc-200 bg-white p-6 space-y-6">
-          <div class="flex items-center gap-2">
-            <BadgeCheck class="h-4 w-4 text-green-600" />
-            <span class="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
-              Global default — applies to all vehicles
-            </span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <BadgeCheck class="h-4 w-4 text-green-600" />
+              <span class="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+                Global default — applies to all vehicles
+              </span>
+            </div>
+            <Button v-if="!editingPolicy" variant="outline" size="sm" @click="startEditPolicy">
+              <Pencil class="h-4 w-4 mr-1.5" /> Edit
+            </Button>
           </div>
 
-          <div class="space-y-2">
-            <Label>Policy Name</Label>
-            <Input v-model="name" />
-          </div>
-
-          <div class="space-y-2">
-            <Label>Description</Label>
-            <Input v-model="description" />
-          </div>
-
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
+          <!-- Read-only display -->
+          <template v-if="!editingPolicy">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Policy Name</Label>
+                <p class="text-sm text-zinc-700 mt-1">{{ name || '—' }}</p>
+              </div>
+              <div>
+                <Label>Description</Label>
+                <p class="text-sm text-zinc-700 mt-1">{{ description || '—' }}</p>
+              </div>
+            </div>
+            <div>
               <Label>Discount Tiers (by rental days)</Label>
-              <Button variant="outline" size="sm" @click="addTier">
-                <Plus class="h-4 w-4 mr-1" /> Add Tier
+              <p v-if="tiersLabel" class="text-sm text-zinc-700 mt-1">{{ tiersLabel }}</p>
+              <p v-else class="text-sm text-zinc-400 mt-1">No tiers configured.</p>
+            </div>
+          </template>
+
+          <!-- Edit form -->
+          <template v-else>
+            <div class="space-y-2">
+              <Label>Policy Name</Label>
+              <Input v-model="name" />
+            </div>
+
+            <div class="space-y-2">
+              <Label>Description</Label>
+              <Input v-model="description" />
+            </div>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <Label>Discount Tiers (by rental days)</Label>
+                <Button variant="outline" size="sm" @click="addTier">
+                  <Plus class="h-4 w-4 mr-1" /> Add Tier
+                </Button>
+              </div>
+
+              <p class="text-xs text-zinc-400">
+                The longest matching duration wins. The first tier must start at 1 day.
+              </p>
+
+              <div v-for="(tier, idx) in tiers" :key="idx" class="flex items-end gap-3">
+                <div class="flex-1">
+                  <Label>Minimum days</Label>
+                  <Input v-model="tier.min_days" type="number" min="1" />
+                </div>
+                <div class="flex-1">
+                  <Label>Discount %</Label>
+                  <Input v-model="tier.discount_percent" type="number" min="0" max="100" step="0.01" />
+                </div>
+                <button
+                  type="button"
+                  class="h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-red-600"
+                  @click="removeTier(idx)"
+                  :disabled="tiers.length <= 1"
+                >
+                  <Trash2 class="h-4 w-4" />
+                </button>
+              </div>
+
+              <p v-if="tiersLabel" class="text-xs text-zinc-500 bg-zinc-50 border border-zinc-100 rounded p-3">
+                <span class="font-medium">Preview:</span> {{ tiersLabel }}
+              </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <Button :disabled="saving" @click="savePolicy">
+                <Save class="h-4 w-4 mr-1.5" />
+                {{ saving ? 'Saving...' : 'Save' }}
+              </Button>
+              <Button variant="ghost" :disabled="saving" @click="cancelEditPolicy">
+                <X class="h-4 w-4 mr-1.5" /> Cancel
               </Button>
             </div>
-
-            <p class="text-xs text-zinc-400">
-              The longest matching duration wins. The first tier must start at 1 day.
-            </p>
-
-            <div v-for="(tier, idx) in tiers" :key="idx" class="flex items-end gap-3">
-              <div class="flex-1">
-                <Label>Minimum days</Label>
-                <Input v-model="tier.min_days" type="number" min="1" />
-              </div>
-              <div class="flex-1">
-                <Label>Discount %</Label>
-                <Input v-model="tier.discount_percent" type="number" min="0" max="100" step="0.01" />
-              </div>
-              <button
-                type="button"
-                class="h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-red-600"
-                @click="removeTier(idx)"
-                :disabled="tiers.length <= 1"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
-            </div>
-
-            <p v-if="tiersLabel" class="text-xs text-zinc-500 bg-zinc-50 border border-zinc-100 rounded p-3">
-              <span class="font-medium">Preview:</span> {{ tiersLabel }}
-            </p>
-          </div>
+          </template>
 
           <p v-if="error" class="text-sm text-red-600 flex items-start gap-1.5">
             <AlertCircle class="h-4 w-4 mt-0.5 shrink-0" /> {{ error }}
           </p>
           <p v-if="success" class="text-sm text-green-600">{{ success }}</p>
-
-          <Button class="w-full" :disabled="saving" @click="savePolicy">
-            <Save class="h-4 w-4 mr-1.5" />
-            {{ saving ? 'Saving...' : 'Save Discount Policy' }}
-          </Button>
         </div>
       </template>
     </main>
